@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    objets::{Case, Direction, Ingredient, IngredientType, Recette},
-    player::Player, RECETTE_RANGE
+    objets::{ActionResult, Case, Direction, Ingredient, IngredientType, Recette}, player::Player, RECETTE_RANGE
 };
 
 #[derive(Debug, PartialEq)]
@@ -43,7 +42,7 @@ impl Game {
 
         let map: Vec<Vec<Case>> = vec![
             vec![Case::Table(None), Case::Table(None), Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None), Case::Table(None),Case::Table(None),Case::ASSIETTE, Case::Table(None)],
-            vec![Case::Ingredient(pain.clone()), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::COUPER, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None)],
+            vec![Case::Ingredient(pain), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::COUPER, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None)],
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::COUPER, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None)],
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::COUPER, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None)],
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Table(None), Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
@@ -51,7 +50,7 @@ impl Game {
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Ingredient(tomate.clone()), Case::Table(None),Case::Ingredient(salade.clone()),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None) ,Case::Table(None),Case::Ingredient(oignon.clone()),Case::Table(None),Case::Table(None),]        ];
+            vec![Case::Table(None), Case::Ingredient(tomate), Case::Table(None),Case::Ingredient(salade),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None) ,Case::Table(None),Case::Ingredient(oignon),Case::Table(None),Case::Table(None),]        ];
         
         Self {
             player: Player::new((1, 1)),
@@ -67,115 +66,162 @@ impl Game {
 
 
     
-    pub fn move_player(&mut self, direction: Direction) {
-        self.player.set_facing(direction);
-        
-        let mut wanted_pos: (usize, usize) = self.get_facing().0;
+    pub fn move_player(&mut self, direction: Direction) -> ActionResult {
+        let check = self.check_move(direction);
+        if check == ActionResult::Success {
+            self.player.set_facing(direction);
+            let (wanted_pos, _) = self.get_target_position(direction);
+            self.player.set_pos(wanted_pos.0, wanted_pos.1, direction);
+        }
+        check
+    }
 
+    pub fn check_move(&self, direction: Direction) -> ActionResult {
+        let (wanted_pos, _) = self.get_target_position(direction);
+        
+        if !self.is_position_valid(wanted_pos) {
+            return ActionResult::InvalidPosition;
+        }
+        
+        if self.map[wanted_pos.1][wanted_pos.0] != Case::Vide {
+            return ActionResult::Blocked;
+        }
+        
+        ActionResult::Success
+    }
+
+    fn get_target_position(&self, direction: Direction) -> ((usize, usize), Case) {
+        let pos = self.player.get_pos();
+        let mut target_pos = pos;
+        
         match direction {
-            Direction::North => {
-                if wanted_pos.1 == 0 {
-                    return;
-                }
-                wanted_pos.1 = wanted_pos.1 - 1
-            },
-            Direction::West => {
-                if wanted_pos.0 == 0 {
-                    return;
-                }
-                wanted_pos.0 = wanted_pos.0 - 1
-            },
-            Direction::South => {
-                if wanted_pos.1 == self.map.len()-1 {
-                    return;
-                }
-                wanted_pos.1 = wanted_pos.1 + 1
-            },
-            Direction::East => {
-                if wanted_pos.0 == self.map[0].len() {
-                    return;
-                }
-                wanted_pos.0 = wanted_pos.0 + 1
-            },
-        }
-
-        if self.map[wanted_pos.1][wanted_pos.0] == Case::Vide  {
-                self.player.set_pos(wanted_pos.0, wanted_pos.1, direction);
+            Direction::North if pos.1 > 0 => target_pos.1 -= 1,
+            Direction::South if pos.1 < self.map.len() - 1 => target_pos.1 += 1,
+            Direction::West if pos.0 > 0 => target_pos.0 -= 1,
+            Direction::East if pos.0 < self.map[0].len() - 1 => target_pos.0 += 1,
+            _ => return (pos, Case::Vide), // Position invalide
         }
         
+        (target_pos, self.map[target_pos.1][target_pos.0])
+    }
+    
+    fn is_position_valid(&self, pos: (usize, usize)) -> bool {
+        pos.0 < self.map[0].len() && pos.1 < self.map.len()
     }
 
     pub fn get_facing(&self) -> ((usize, usize), Case) {
         let pos: (usize, usize) = self.player.get_pos();
-        let mut facing_pos: (usize, usize) = (0, 0);
+        let mut facing_pos: (usize, usize) = pos;
         let lenx: usize = self.map[0].len();
         let leny: usize = self.map.len();
 
         match self.player.get_facing() {
             Direction::North => facing_pos.1 = pos.1 - 1,
-            Direction::West => facing_pos.0 = pos.1 - 1,
+            Direction::West => facing_pos.0 = pos.0 - 1,
             Direction::South => facing_pos.1 = pos.1 + 1,
-            Direction::East => facing_pos.0 = pos.1 + 1,
+            Direction::East => facing_pos.0 = pos.0 + 1,
         }
 
         if facing_pos.0 >= lenx || facing_pos.1 >= leny {
             return (facing_pos, Case::Vide);
         }
-        return (facing_pos, self.map[facing_pos.1][facing_pos.0]);
+        
+        (facing_pos, self.map[facing_pos.1][facing_pos.0])
     }
-    
-    pub fn pickup(&mut self) {
-        let (facing_pos, facing_object) = self.get_facing();
-        
-        let object_held = self.player.get_object_held();
-        
-        if object_held != None{
-            return;
-        }
-        
-        match facing_object {
-            Case::ASSIETTE => {
-                        self.player.set_object_held(self.assiette.pop());
-                    }
-            Case::Ingredient(object) => {
-                        self.player.set_object_held(Some(object));
-                    }
-            Case::Table(None) => {}
-            Case::Table(ingredient) => {
-                        self.player.set_object_held(ingredient);
-                        self.map[facing_pos.1][facing_pos.0] = Case::Table(None);
-                    }
-            _ => {}
-        }
-    }
-    
-    pub fn deposit(&mut self) {        
-        let (facing_pos, facing_object) = self.get_facing();
-        let mut object_held = match self.player.get_object_held() {
-            None => return,
-            Some(obj) => obj,
-        };
 
+    pub fn pickup(&mut self) -> ActionResult {
+        let check = self.check_pickup();
+        if check != ActionResult::Success {
+            return check;
+        }
+        
+        let (facing_pos, facing_object) = self.get_facing();
+        
         match facing_object {
             Case::ASSIETTE => {
-                        self.assiette.push(object_held);
-                        for i in 0..self.recettes.len() {
-                            if self.assiette == *self.recettes[i].get_ingredients() {
-                                self.score += self.assiette.len() as i32;
-                                self.assiette = vec![];
-                                self.recettes.remove(i);
-                            }
-                        }
-                    }
-            Case::Table(None) => {
-                        self.map[facing_pos.1][facing_pos.0] = Case::Table(self.player.get_object_held());
-                    }
-            Case::Table(_) => {}
-            Case::COUPER => {
-                object_held.couper();
-                self.player.set_object_held(Some(object_held));
+                if let Some(ingredient) = self.assiette.pop() {
+                    self.player.set_object_held(Some(ingredient));
+                    ActionResult::Success
+                } else {
+                    ActionResult::NoTarget
+                }
             }
-            _ => {}
+            Case::Ingredient(object) => {
+                self.player.set_object_held(Some(object));
+                self.map[facing_pos.1][facing_pos.0] = Case::Vide;
+                ActionResult::Success
+            }
+            Case::Table(Some(ingredient)) => {
+                self.player.set_object_held(Some(ingredient));
+                self.map[facing_pos.1][facing_pos.0] = Case::Table(None);
+                ActionResult::Success
+            }
+            _ => ActionResult::NoTarget
+        }
+    }
+
+    pub fn check_pickup(&self) -> ActionResult {
+        if self.player.get_object_held().is_some() {
+            return ActionResult::HandsFull;
+        }
+        
+        let (_, facing_object) = self.get_facing();
+        match facing_object {
+            Case::Ingredient(_) | Case::Table(Some(_)) | Case::ASSIETTE => ActionResult::Success,
+            _ => ActionResult::NoTarget,
+        }
+    }
+
+    pub fn deposit(&mut self) -> ActionResult {
+        let check = self.check_deposit();
+        if check != ActionResult::Success {
+            return check;
+        }
+        
+        let (facing_pos, facing_object) = self.get_facing();
+        let object_held = self.player.get_object_held().unwrap(); // Safe car on a vérifié dans check_deposit
+        
+        match facing_object {
+            Case::ASSIETTE => {
+                self.assiette.push(object_held);
+                self.player.set_object_held(None);
+                
+                // Vérifier si on a complété une recette
+                for i in 0..self.recettes.len() {
+                    if self.assiette == *self.recettes[i].get_ingredients() {
+                        self.score += self.assiette.len() as i32;
+                        self.assiette = vec![];
+                        self.recettes.remove(i);
+                        break;
+                    }
+                }
+                ActionResult::Success
+            }
+            Case::Table(None) => {
+                self.map[facing_pos.1][facing_pos.0] = Case::Table(Some(object_held));
+                self.player.set_object_held(None);
+                ActionResult::Success
+            }
+            Case::COUPER => {
+                let mut ingredient = object_held;
+                ingredient.couper();
+                self.player.set_object_held(Some(ingredient));
+                ActionResult::Success
+            }
+            _ => ActionResult::NoTarget
+        }
+    }
+
+    pub fn check_deposit(&self) -> ActionResult {
+        if self.player.get_object_held().is_none() {
+            return ActionResult::HandsEmpty;
+        }
+        
+        let (_, facing_object) = self.get_facing();
+        match facing_object {
+            Case::Table(None) | Case::ASSIETTE | Case::COUPER => ActionResult::Success,
+            Case::Table(Some(_)) => ActionResult::TableOccupied,
+            _ => ActionResult::NoTarget,
         }
     }
 
@@ -218,7 +264,7 @@ impl Game {
             None => {
                 
             },
-            Some(ingr) => {
+            Some(_ingr) => {
 
             },
         };

@@ -1,4 +1,4 @@
-use HAI716I_POASMA::app::App;
+use hai716i_poasma::app::App;
 use color_eyre::Result;
 
 fn main() -> Result<()> {

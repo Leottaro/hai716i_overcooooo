@@ -3,16 +3,6 @@
 version = 4
 
 [[package]]
-name = "HAI716I_POASMA"
-version = "0.1.0"
-dependencies = [
- "color-eyre",
- "crossterm 0.29.0",
- "rand",
- "ratatui",
-]
-
-[[package]]
 name = "addr2line"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -300,6 +290,16 @@ name = "gimli"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
+
+[[package]]
+name = "hai716i_poasma"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "crossterm 0.29.0",
+ "rand",
+ "ratatui",
+]
 
 [[package]]
 name = "hashbrown"

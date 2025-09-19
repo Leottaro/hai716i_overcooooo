@@ -13,6 +13,12 @@ pub enum Direction {
     East,
 }
 
+impl Default for Recette {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum IngredientType {
     Pain,
@@ -50,6 +56,19 @@ impl Ingredient {
         }
     }
 
+    pub fn emoji(&self) -> &'static str {
+        match (self.type_ingredient, self.etat) {
+            (IngredientType::Pain, IngredientEtat::Normal) => "🥖",
+            (IngredientType::Pain, IngredientEtat::Coupe) => "🍞",
+            (IngredientType::Salade, IngredientEtat::Normal) => "🥬",
+            (IngredientType::Salade, IngredientEtat::Coupe) => "🥗",
+            (IngredientType::Tomate, IngredientEtat::Normal) => "🍅",
+            (IngredientType::Tomate, IngredientEtat::Coupe) => "🍅", // Même emoji pour coupé
+            (IngredientType::Oignon, IngredientEtat::Normal) => "🧅",
+            (IngredientType::Oignon, IngredientEtat::Coupe) => "🧅", // Même emoji pour coupé
+        }
+    }
+
     pub fn upper_char(&self) -> char {
         self.char().to_uppercase().next().unwrap()
     }
@@ -63,6 +82,17 @@ impl Display for Ingredient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Debug::fmt(self, f)
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ActionResult {
+    Success,
+    Blocked,           // Chemin bloqué
+    HandsFull,         // Mains pleines
+    HandsEmpty,        // Mains vides
+    NoTarget,          // Rien à interagir
+    InvalidPosition,   // Position invalide
+    TableOccupied,     // Table déjà occupée
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -81,22 +111,26 @@ pub struct Recette {
     temps_initial: usize,
 }
 
-impl Recette{
+impl Recette {
     pub fn new() -> Self {
         let mut rng = rand::rng();
         let mut ingredients = vec![Ingredient::new(IngredientType::Pain)]; // de base il y a du pain
-        let possibles = vec![Ingredient::new(IngredientType::Salade), Ingredient::new(IngredientType::Tomate), Ingredient::new(IngredientType::Oignon)];
+        let possibles = [
+            Ingredient::new(IngredientType::Salade),
+            Ingredient::new(IngredientType::Tomate),
+            Ingredient::new(IngredientType::Oignon),
+        ];
 
-        if let Some(choice) = possibles.choose(&mut rng) {
-            ingredients.push(choice.clone());
+        if let Some(&choice) = possibles.choose(&mut rng) {
+            ingredients.push(choice);
         }
-        let deadline = rng.random_range(DEADLINE_RANGE);
+        let deadline = rng.random_range(DEADLINE_RANGE.clone());
         let temps_initial = deadline;
-        
+
         Self {
             ingredients,
-            deadline : deadline,
-            temps_initial
+            deadline,
+            temps_initial,
         }
     }
 
