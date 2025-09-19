@@ -2,6 +2,8 @@ use std::fmt::Display;
 
 use rand::{seq::IndexedRandom, Rng};
 
+use crate::DEADLINE_RANGE;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 
 pub enum Direction {
@@ -11,7 +13,7 @@ pub enum Direction {
     East,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum IngredientType {
     Pain,
     Salade,
@@ -19,13 +21,13 @@ pub enum IngredientType {
     Oignon,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum IngredientEtat {
     Normal,
     Coupe,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Ingredient {
     type_ingredient: IngredientType,
     etat: IngredientEtat,
@@ -76,6 +78,7 @@ pub enum Case {
 pub struct Recette {
     ingredients: Vec<Ingredient>,
     deadline: usize,
+    temps_initial: usize,
 }
 
 impl Recette{
@@ -87,11 +90,13 @@ impl Recette{
         if let Some(choice) = possibles.choose(&mut rng) {
             ingredients.push(choice.clone());
         }
-        let deadline = rng.random_range(30*5..=40*5);
+        let deadline = rng.random_range(DEADLINE_RANGE);
+        let temps_initial = deadline;
         
         Self {
             ingredients,
             deadline : deadline,
+            temps_initial
         }
     }
 
@@ -101,6 +106,18 @@ impl Recette{
 
     pub fn is_too_late(&self) -> bool {
         self.deadline == 0
+    }
+
+    pub fn get_temps_init(&self) -> usize {
+        self.temps_initial
+    }
+
+    pub fn get_ingredients(&self) -> &Vec<Ingredient> {
+        &self.ingredients
+    }
+
+    pub fn get_deadline(&self) -> usize {
+        self.deadline
     }
 }
 

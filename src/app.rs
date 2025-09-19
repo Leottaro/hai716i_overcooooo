@@ -93,6 +93,7 @@ impl App {
         let cell_width = inner_area.width / map_width;
         let cell_height = inner_area.height / map_height;
 
+        let player_pos = self.game.get_player().get_pos();
         // Dessiner chaque cellule de la map comme un bloc
         for (y, row) in self.game.get_map().iter().enumerate() {
             for (x, cell) in row.iter().enumerate() {
@@ -104,14 +105,19 @@ impl App {
                 };
 
                 // Choisir la couleur en fonction du contenu de la cellule
-                let (style, letter) = match cell {
+
+
+                let (style, letter) = if (x, y) == player_pos {
+                    (Style::default().bg(Color::Green).fg(Color::Black), '@')
+                } 
+                else {match cell {
                     Case::Table(None) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), 'T'),
                     Case::Table(Some(ingr)) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), ingr.char()),
                     Case::Ingredient(ingr) => (Style::default().bg(Color::Red).fg(Color::White), ingr.char()),
                     Case::COUPER => (Style::default().bg(Color::LightBlue).fg(Color::Black), 'C'),
                     Case::ASSIETTE => (Style::default().bg(Color::White).fg(Color::Black), 'A'),
                     _ => (Style::default().bg(Color::Black).fg(Color::White), ' '),
-                };
+                }};
 
                 // Créer un bloc pour cette cellule
                 let cell_block = Block::default().style(style);
@@ -130,7 +136,7 @@ impl App {
                 }
             }
         }
-
+        
         // Panneau droit avec contenu
         let right_paragraph = Paragraph::new(self.right_panel_content.as_str()).block(
             Block::bordered()

@@ -1,9 +1,9 @@
+use std::collections::HashSet;
+
 use crate::{
     objets::{Case, Direction, Ingredient, IngredientType, Recette},
-    player::Player
+    player::Player, RECETTE_RANGE
 };
-use std::fmt::Display;
-
 
 #[derive(Debug, PartialEq)]
 pub struct Game {
@@ -19,6 +19,10 @@ pub struct Game {
 }
 
 impl Game {
+    pub fn get_player(&self) -> &Player {
+        &self.player
+    }
+
     pub fn get_map(&self) -> &Vec<Vec<Case>> {
         &self.map
     }
@@ -57,7 +61,7 @@ impl Game {
             score: 0,
             t: 0,
             max_t,
-            next_recette: rand::random_range(25..=50),
+            next_recette: rand::random_range(RECETTE_RANGE),
         }
     }
 
@@ -155,6 +159,13 @@ impl Game {
         match facing_object {
             Case::ASSIETTE => {
                         self.assiette.push(object_held);
+                        for i in 0..self.recettes.len() {
+                            if self.assiette == *self.recettes[i].get_ingredients() {
+                                self.score += self.assiette.len() as i32;
+                                self.assiette = vec![];
+                                self.recettes.remove(i);
+                            }
+                        }
                     }
             Case::Table(None) => {
                         self.map[facing_pos.1][facing_pos.0] = Case::Table(self.player.get_object_held());
@@ -188,12 +199,33 @@ impl Game {
 
         if self.t == self.next_recette {
             self.recettes.push(Recette::new());
-            self.next_recette = rand::random_range(25..=50);
-        }        
+            self.next_recette = rand::random_range(RECETTE_RANGE);
+        }
+    }
+
+    pub fn robot(&mut self) {
+        let next_recette = match self.recettes.last() {
+            None => return,
+            Some(recette) => recette,
+        };
+
+        let mut ingredients_restant = next_recette.get_ingredients().clone().into_iter().collect::<HashSet<_>>();
+        for ingredient in &self.assiette {
+            ingredients_restant.remove(ingredient);
+        }
+
+        match self.player.get_object_held() {
+            None => {
+                
+            },
+            Some(ingr) => {
+
+            },
+        };
     }
 }
 
-// impl Display for Game {
+// impl std::fmt::Display for Game {
 //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 //         for (y, row) in self.map.iter().enumerate() {
 //             let line = row
