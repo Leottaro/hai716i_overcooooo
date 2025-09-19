@@ -1,4 +1,6 @@
 
+use std::{thread::sleep, time::Duration};
+
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     DefaultTerminal, Frame,
@@ -48,12 +50,14 @@ impl App {
 
     pub fn run(&mut self, mut terminal: DefaultTerminal) -> Result<()> {
         loop {
+            self.game.robot();
             self.game.update();
             terminal.draw(|frame| self.draw(frame))?;
-            self.handle_events()?;
+            // self.handle_events()?;
             if self.should_quit {
                 break Ok(());
             }
+            sleep(Duration::from_millis(100));
         }
     }
 
@@ -112,7 +116,7 @@ impl App {
                 } 
                 else {match cell {
                     Case::Table(None) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), 'T'),
-                    Case::Table(Some(ingr)) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), ingr.char()),
+                    Case::Table(Some(ingr)) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), ingr.type_ingredient.char()),
                     Case::Ingredient(ingr) => (Style::default().bg(Color::Red).fg(Color::White), ingr.char()),
                     Case::COUPER => (Style::default().bg(Color::LightBlue).fg(Color::Black), 'C'),
                     Case::ASSIETTE => (Style::default().bg(Color::White).fg(Color::Black), 'A'),

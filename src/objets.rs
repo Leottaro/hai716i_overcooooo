@@ -29,20 +29,13 @@ pub enum IngredientEtat {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Ingredient {
-    type_ingredient: IngredientType,
-    etat: IngredientEtat,
+    pub type_ingredient: IngredientType,
+    pub etat: IngredientEtat,
 }
 
-impl Ingredient {
-    pub fn new(type_ingredient: IngredientType) -> Self {
-        Self {
-            type_ingredient,
-            etat: IngredientEtat::Normal,
-        }
-    }
-
+impl IngredientType {
     pub fn char(&self) -> char {
-        match self.type_ingredient {
+        match self {
             IngredientType::Pain => 'p',
             IngredientType::Salade => 's',
             IngredientType::Tomate => 't',
@@ -52,6 +45,15 @@ impl Ingredient {
 
     pub fn upper_char(&self) -> char {
         self.char().to_uppercase().next().unwrap()
+    }
+}
+
+impl Ingredient {
+    pub fn new(type_ingredient: IngredientType) -> Self {
+        Self {
+            type_ingredient,
+            etat: IngredientEtat::Normal,
+        }
     }
 
     pub fn couper(&mut self) {
@@ -69,7 +71,7 @@ impl Display for Ingredient {
 pub enum Case {
     Vide,
     Table(Option<Ingredient>),
-    Ingredient(Ingredient),
+    Ingredient(IngredientType),
     COUPER,
     ASSIETTE,
 }
@@ -130,4 +132,12 @@ impl Display for Recette {
         let temps = self.deadline;
         write!(f, "{temps}:{ingredients}")
     }
+}
+
+#[derive(Debug)]
+pub enum RobotAction {
+    Deplacer(Vec<(usize, usize)>, Direction),
+    Pickup,
+    Deposit,
+    None,
 }
