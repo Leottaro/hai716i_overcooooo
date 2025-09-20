@@ -1,13 +1,19 @@
 use crate::game::Game;
-use crate::objets::{ActionResult, Case, Direction, Ingredient};
+use crate::objets::{ActionResult, Case, Direction};
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use ratatui::Terminal;
+use ratatui::prelude::Backend;
 use ratatui::{
-    DefaultTerminal, Frame,
-    layout::{Constraint, Layout, Rect},
+    Frame,
+    layout::{Constraint, Layout, Rect, Margin},
     style::{Color, Style},
-    widgets::{Block, Paragraph},
+    widgets::{Block, Paragraph, Gauge},
 };
+use std::io;
+use std::time::{Duration, Instant};
+
+const BROWN: Color = Color::Rgb(142, 73, 26);
 
 // Macros pour rediriger les prints vers le système de log
 #[macro_export]
@@ -24,12 +30,22 @@ macro_rules! app_println {
     };
 }
 
+fn time_to_color(temps_restant: u32, temps_initial: u32) -> Color {
+    let ratio = temps_restant as f32 / temps_initial as f32;
+    if ratio > 0.5 {
+        Color::Green
+    } else if ratio > 0.2 {
+        Color::Yellow
+    } else {
+        Color::Red
+    }
+}
+
 pub struct App {
     pub right_panel_content: String,
     pub should_quit: bool,
     pub game: Game,
     pub logs: Vec<String>,
-    pub ingr_held: Option<Ingredient>,
 }
 
 impl Default for App {
@@ -47,16 +63,13 @@ impl Default for App {
         }
 
         Self {
-            right_panel_content:
-                "Personnage: @\nMurs: #\nSol: .\n\nUtilisez les flèches\npour vous déplacer!"
-                    .to_string(),
+            right_panel_content: "".to_string(),
             should_quit: false,
             game: Game::new(300),
             logs: vec![
                 "Application démarrée".to_string(),
                 "Carte générée".to_string(),
             ],
-            ingr_held: None,
         }
     }
 }
@@ -79,13 +92,35 @@ impl App {
         self.log(message.to_string());
     }
 
-    pub fn run(&mut self, mut terminal: DefaultTerminal) -> Result<()> {
+    pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+        let tick_rate = Duration::from_millis(250); // 4 fois par seconde
+        let mut last_tick = Instant::now();
+
         loop {
-            self.game.update();
+            // Render UI
             terminal.draw(|frame| self.draw(frame))?;
-            self.handle_events()?;
+
+            // Gérer le timing
+            let timeout = tick_rate
+                .checked_sub(last_tick.elapsed())
+                .unwrap_or_else(|| Duration::from_secs(0));
+
+            // Gérer les événements avec timeout
+            if event::poll(timeout)? {
+                let return_handle = self.handle_events();
+                if let Err(e) = return_handle {
+                    self.log_fmt(&format!("Erreur event: {}", e));
+                }
+            }
+
+            // Vérifier si c'est le moment de faire un tick
+            if last_tick.elapsed() >= tick_rate {
+                self.game.tick();
+                last_tick = Instant::now();
+            }
+
             if self.should_quit {
-                break Ok(());
+                return Ok(());
             }
         }
     }
@@ -95,9 +130,16 @@ impl App {
 
         let player_pos = self.game.get_player().get_pos();
         let right_panel_content = format!(
-            "Coords perso: x={}, y={}\n\nLégende:\n🧑‍🍳 Joueur\n🪑 Table\n🔪 Station de coupe\n🍽️ Assiette\n🍞 Pain\n🥬 Salade\n🍅 Tomate\n🧅 Oignon\n\nUtilisez les flèches\npour vous déplacer!\nItem actuellement tenu: {}",
-            player_pos.0, player_pos.1,
-            self.ingr_held.as_ref().map(|ingr| ingr.emoji()).unwrap_or("Aucun")
+            "Coords perso: x={}, y={}\n\nLégende:\n🧑‍🍳 Joueur\n🪑 Table\n🔪 Station de coupe\n🍽️ Assiette\n🍞 Pain\n🥬 Salade\n🍅 Tomate\n🧅 Oignon\n\nUtilisez les flèches pour vous déplacer!\nItem actuellement tenu: {}\nPosition actuelle: ({}, {})\nRegarde vers: {:?}",
+            player_pos.0,
+            player_pos.1,
+            self.game
+                .get_player()
+                .get_object_held()
+                .map_or("Rien".to_string(), |ingr| ingr.emoji().to_string()),
+            player_pos.0,
+            player_pos.1,
+            self.game.get_player().get_facing(),
         );
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
@@ -106,8 +148,78 @@ impl App {
         let [left_area, right_area] = horizontal.areas(main_area);
 
         // Diviser le panneau droit en deux : infos (en haut) et logs (en bas)
-        let right_vertical = Layout::vertical([Percentage(60), Percentage(40)]);
-        let [right_info_area, right_log_area] = right_vertical.areas(right_area);
+        let right_vertical = Layout::vertical([Min(17), Percentage(80), Percentage(20)]);
+        let [right_info_area, right_recipe_list, right_log_area] = right_vertical.areas(right_area);
+        
+
+        // Afficher les recettes dans le panneau des recettes
+        frame.render_widget(
+            Block::bordered()
+                .title(format!("Recettes ({})", self.game.get_recettes().len()))
+                .style(Style::default().bg(Color::Blue)),
+            right_recipe_list,
+        );
+        let recettes = self.game.get_recettes();
+        let recette_height = 5;
+        // Calculer la zone avec padding (par exemple, 1 caractère tout autour)
+        let padded_recipe_list = right_recipe_list.inner(Margin { vertical: 1, horizontal: 1 });
+        // Utiliser padded_recipe_list pour afficher les blocs de recettes
+        frame.render_widget(
+            Block::default()
+                .style(Style::default().bg(Color::Blue)),
+            padded_recipe_list,
+        );
+        let max_recettes = padded_recipe_list.height as usize / recette_height;
+        for (i, recette) in recettes.iter().take(max_recettes).enumerate() {
+            let ingredients = recette
+                .get_ingredients()
+                .iter()
+                .map(|ingr| ingr.emoji())
+                .collect::<Vec<&str>>()
+                .join(", ");
+
+            let recipe_box =
+                Block::bordered()
+                    .title(format!("Recette {}", i + 1))
+                    .style(Style::default().bg(time_to_color(
+                        recette.get_temps_restant(),
+                        recette.get_temps_initial(),
+                    )));
+
+            // Calculer la zone pour chaque recette
+            let area = Rect {
+                x: padded_recipe_list.x,
+                y: padded_recipe_list.y + (i * recette_height) as u16,
+                width: padded_recipe_list.width,
+                height: recette_height as u16,
+            };
+
+            // Dessiner le bloc sur toute la zone
+            frame.render_widget(recipe_box, area);
+
+            // Diviser la zone en deux (paragraphe + gauge)
+            let [para_area, gauge_area] = Layout::vertical([
+                Length(recette_height as u16 - 1),
+                Length(1),
+            ]).areas(area);
+
+            // Paragraphe avec padding
+            let para_area_padded = para_area.inner(Margin { vertical: 1, horizontal: 1 });
+            let recipe_paragraph = Paragraph::new(format!(
+                "Ingrédients : {}\nTemps restant :",
+                ingredients,
+            ));
+            frame.render_widget(recipe_paragraph, para_area_padded);
+
+            // Gauge avec padding (optionnel, selon le rendu souhaité)
+            let gauge_area_padded = gauge_area.inner(Margin { vertical: 0, horizontal: 1 });
+            let percent = (recette.get_temps_restant() * 100 / recette.get_temps_initial()).min(100);
+            let gauge = Gauge::default()
+                .percent(percent as u16)
+                .label(format!("{}s", recette.get_temps_restant()))
+                .style(Style::default().fg(Color::Green).bg(Color::Black));
+            frame.render_widget(gauge, gauge_area_padded);
+        }
 
         // Barre de titre
         frame.render_widget(Block::bordered().title("Overcook Dark Radé"), title_area);
@@ -122,7 +234,7 @@ impl App {
         frame.render_widget(
             Block::bordered()
                 .title("Game")
-                .style(Style::default().bg(Color::Blue)),
+                .style(Style::default().bg(Color::Black)),
             left_area,
         );
 
@@ -156,18 +268,10 @@ impl App {
                     (Style::default().bg(Color::Green).fg(Color::Black), "🧑‍🍳")
                 } else {
                     match cell {
-                        Case::Table(None) => (
-                            Style::default()
-                                .bg(Color::Rgb(142, 73, 26))
-                                .fg(Color::White),
-                            " ",
-                        ),
-                        Case::Table(Some(ingr)) => (
-                            Style::default()
-                                .bg(Color::Rgb(142, 73, 26))
-                                .fg(Color::White),
-                            ingr.emoji(),
-                        ),
+                        Case::Table(None) => (Style::default().bg(BROWN).fg(Color::White), " "),
+                        Case::Table(Some(ingr)) => {
+                            (Style::default().bg(BROWN).fg(Color::White), ingr.emoji())
+                        }
                         Case::Ingredient(ingr) => (
                             Style::default().bg(Color::Red).fg(Color::White),
                             ingr.emoji(),
@@ -175,8 +279,8 @@ impl App {
                         Case::COUPER => {
                             (Style::default().bg(Color::LightBlue).fg(Color::Black), "🔪")
                         }
-                        Case::ASSIETTE => (Style::default().bg(Color::White).fg(Color::White), "🍽️"),
-                        _ => (Style::default().bg(Color::Black).fg(Color::White), " "),
+                        Case::ASSIETTE => (Style::default().bg(BROWN).fg(Color::White), "🍽️"),
+                        _ => (Style::default().bg(Color::White).fg(Color::White), " "),
                     }
                 };
 
@@ -202,7 +306,7 @@ impl App {
         let right_paragraph = Paragraph::new(right_panel_content.as_str()).block(
             Block::bordered()
                 .title("Infos")
-                .style(Style::default().bg(Color::Red)),
+                .style(Style::default().bg(Color::Blue)),
         );
         frame.render_widget(right_paragraph, right_info_area);
 
@@ -217,112 +321,66 @@ impl App {
         let log_paragraph = Paragraph::new(log_content.as_str()).block(
             Block::bordered()
                 .title("Logs")
-                .style(Style::default().bg(Color::Yellow)),
+                .style(Style::default().bg(Color::Blue)),
         );
         frame.render_widget(log_paragraph, right_log_area);
-        
     }
 
     fn handle_events(&mut self) -> Result<()> {
-        let player_pos = self.game.get_player().get_pos();
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                KeyCode::Char('q') => {
+                KeyCode::Esc => {
                     self.log_fmt("Quitter le jeu");
                     self.should_quit = true;
                 }
-                KeyCode::Up => {
-                    let result = self.game.move_player(Direction::North);
-                    match result {
-                        ActionResult::Success => {
-                            app_println!(self, "Déplacement vers le haut réussi, x: {}, y: {}", player_pos.0, player_pos.1);
-                        },
-                        ActionResult::Blocked => {
-                            app_println!(self, "Chemin bloqué vers le haut");
-                        },
-                        ActionResult::InvalidPosition => {
-                            app_println!(self, "Position invalide");
-                        },
-                        _ => {}
-                    }
+                KeyCode::Up | KeyCode::Char('z') => {
+                    self.game.move_player(Direction::North);
                 }
-                KeyCode::Down => {
-                    let result = self.game.move_player(Direction::South);
-                    match result {
-                        ActionResult::Success => {
-                            app_println!(self, "Déplacement vers le bas réussi, x: {}, y: {}", player_pos.0, player_pos.1);
-                        },
-                        ActionResult::Blocked => {
-                            app_println!(self, "Chemin bloqué vers le bas");
-                        },
-                        ActionResult::InvalidPosition => {
-                            app_println!(self, "Position invalide");
-                        },
-                        _ => {}
-                    }
+                KeyCode::Down | KeyCode::Char('s') => {
+                    self.game.move_player(Direction::South);
                 }
-                KeyCode::Left => {
-                    let result = self.game.move_player(Direction::West);
-                    match result {
-                        ActionResult::Success => {
-                            app_println!(self, "Déplacement vers la gauche réussi, x: {}, y: {}", player_pos.0, player_pos.1);
-                        },
-                        ActionResult::Blocked => {
-                            app_println!(self, "Chemin bloqué vers la gauche");
-                        },
-                        ActionResult::InvalidPosition => {
-                            app_println!(self, "Position invalide");
-                        },
-                        _ => {}
-                    }
+                KeyCode::Left | KeyCode::Char('q') => {
+                    self.game.move_player(Direction::West);
                 }
-                KeyCode::Right => {
-                    let result = self.game.move_player(Direction::East);
-                    match result {
-                        ActionResult::Success => {
-                            app_println!(self, "Déplacement vers la droite réussi, x: {}, y: {}", player_pos.0, player_pos.1);
-                        },
-                        ActionResult::Blocked => {
-                            app_println!(self, "Chemin bloqué vers la droite");
-                        },
-                        ActionResult::InvalidPosition => {
-                            app_println!(self, "Position invalide");
-                        },
-                        _ => {}
-                    }
+                KeyCode::Right | KeyCode::Char('d') => {
+                    self.game.move_player(Direction::East);
                 }
-                KeyCode::Char('p') => {
+                KeyCode::Char(' ') => {
                     let result = self.game.pickup();
                     match result {
                         ActionResult::Success => {
                             app_println!(self, "Objet ramassé avec succès");
-                        },
+                        }
                         ActionResult::HandsFull => {
                             app_println!(self, "Mains pleines ! Impossible de ramasser");
-                        },
+                        }
                         ActionResult::NoTarget => {
-                            app_println!(self, "Rien à ramasser ici");
-                        },
+                            app_println!(self, "Rien à ramasser à {:?}", self.game.get_facing());
+                        }
                         _ => {}
                     }
                 }
-                KeyCode::Char('d') => {
+                KeyCode::Char('e') => {
                     let result = self.game.deposit();
                     match result {
                         ActionResult::Success => {
                             app_println!(self, "Objet déposé avec succès");
-                        },
+                        }
                         ActionResult::HandsEmpty => {
                             app_println!(self, "Mains vides ! Rien à déposer");
-                        },
+                        }
                         ActionResult::TableOccupied => {
                             app_println!(self, "Table occupée ! Impossible de déposer");
-                        },
+                        }
                         ActionResult::NoTarget => {
                             app_println!(self, "Impossible de déposer ici");
-                        },
+                        }
                         _ => {}
                     }
+                }
+                KeyCode::Char('r') => {
+                    self.game.ajouter_recette_random();
+                    app_println!(self, "Nouvelle recette ajoutée !");
                 }
                 _ => {}
             },

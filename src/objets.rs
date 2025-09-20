@@ -1,6 +1,7 @@
 use std::fmt::Display;
+use std::time::Instant;
 
-use rand::{seq::IndexedRandom, Rng};
+use rand::{Rng, seq::IndexedRandom};
 
 use crate::DEADLINE_RANGE;
 
@@ -11,12 +12,6 @@ pub enum Direction {
     West,
     South,
     East,
-}
-
-impl Default for Recette {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
@@ -87,12 +82,12 @@ impl Display for Ingredient {
 #[derive(Debug, PartialEq)]
 pub enum ActionResult {
     Success,
-    Blocked,           // Chemin bloqué
-    HandsFull,         // Mains pleines
-    HandsEmpty,        // Mains vides
-    NoTarget,          // Rien à interagir
-    InvalidPosition,   // Position invalide
-    TableOccupied,     // Table déjà occupée
+    Blocked,         // Chemin bloqué
+    HandsFull,       // Mains pleines
+    HandsEmpty,      // Mains vides
+    NoTarget,        // Rien à interagir
+    InvalidPosition, // Position invalide
+    TableOccupied,   // Table déjà occupée
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -107,8 +102,9 @@ pub enum Case {
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
     ingredients: Vec<Ingredient>,
-    deadline: usize,
-    temps_initial: usize,
+    temps_restant: u32,
+    temps_initial: u32,
+    last_update: Instant,  // Nouveau champ
 }
 
 impl Recette {
@@ -124,44 +120,68 @@ impl Recette {
         if let Some(&choice) = possibles.choose(&mut rng) {
             ingredients.push(choice);
         }
-        let deadline = rng.random_range(DEADLINE_RANGE.clone());
-        let temps_initial = deadline;
+        let temps_initial = rng.random_range(DEADLINE_RANGE.clone()) as u32;
+        let temps_restant = temps_initial;
 
         Self {
             ingredients,
-            deadline,
             temps_initial,
+            temps_restant,
+            last_update: Instant::now(),
         }
     }
 
-    pub fn pass_time(&mut self) {
-        self.deadline -= 1;
-    }
-
-    pub fn is_too_late(&self) -> bool {
-        self.deadline == 0
-    }
-
-    pub fn get_temps_init(&self) -> usize {
-        self.temps_initial
-    }
-
-    pub fn get_ingredients(&self) -> &Vec<Ingredient> {
-        &self.ingredients
-    }
-
-    pub fn get_deadline(&self) -> usize {
-        self.deadline
+pub fn update(&mut self) {
+    let now = Instant::now();
+    let elapsed = now.duration_since(self.last_update).as_secs() as u32;
+    if elapsed > 0 {
+        self.temps_restant = self.temps_restant.saturating_sub(elapsed);
+        self.last_update = now;
     }
 }
 
-impl Display for Recette {
+pub fn pass_time(&mut self) {
+    self.temps_restant -= 1;
+}
+
+pub fn is_too_late(&self) -> bool {
+    self.temps_restant == 0
+}
+
+pub fn get_ingredients(&self) -> &Vec<Ingredient> {
+    &self.ingredients
+}
+
+pub fn get_temps_initial(&self) -> u32 {
+    self.temps_initial
+}
+
+pub fn get_temps_restant(&self) -> u32 {
+    self.temps_restant
+}
+
+}
+
+impl Default for Recette {
+    fn default() -> Self {
+        Recette {
+            ingredients: vec![Ingredient::new(IngredientType::Pain)],
+            temps_initial: *DEADLINE_RANGE.start() as u32,
+            temps_restant: *DEADLINE_RANGE.start() as u32,
+            last_update: Instant::now(),
+        }
+    }
+}
+
+/* impl Display for Recette {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ingredients = self.ingredients
-                    .iter()
-                    .map(Ingredient::to_string)
-                    .fold(String::new(), |i1, i2| format!("{i1},{i2}"));
-        let temps = self.deadline;
+        let ingredients = self
+            .ingredients
+            .iter()
+            .map(Ingredient::to_string)
+            .fold(String::new(), |i1, i2| format!("{i1},{i2}"));
+        let temps = self.temps_restant;
         write!(f, "{temps}:{ingredients}")
     }
 }
+ */

@@ -9,7 +9,6 @@ pub struct Player {
     facing: Direction,
 }
 
-
 impl Player {
     pub fn new(position: (usize, usize)) -> Self {
         Self {
@@ -48,7 +47,7 @@ impl Player {
 
 impl Display for Player {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let c : char = match self.get_facing() {
+        let c: char = match self.get_facing() {
             Direction::North => '↑',
             Direction::West => '←',
             Direction::South => '↓',

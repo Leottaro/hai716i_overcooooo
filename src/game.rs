@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use crate::{
-    objets::{ActionResult, Case, Direction, Ingredient, IngredientType, Recette}, player::Player, RECETTE_RANGE
+    RECETTE_RANGE,
+    objets::{ActionResult, Case, Direction, Ingredient, IngredientType, Recette},
+    player::Player,
 };
 
 #[derive(Debug, PartialEq)]
@@ -10,7 +12,7 @@ pub struct Game {
     assiette: Vec<Ingredient>,
     map: Vec<Vec<Case>>,
     recettes: Vec<Recette>,
-    
+
     score: i32,
     next_recette: usize,
     t: usize,
@@ -20,6 +22,10 @@ pub struct Game {
 impl Game {
     pub fn get_player(&self) -> &Player {
         &self.player
+    }
+
+    pub fn get_recettes(&self) -> &Vec<Recette> {
+        &self.recettes
     }
 
     pub fn get_map(&self) -> &Vec<Vec<Case>> {
@@ -41,17 +47,178 @@ impl Game {
         let oignon = Ingredient::new(IngredientType::Oignon);
 
         let map: Vec<Vec<Case>> = vec![
-            vec![Case::Table(None), Case::Table(None), Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None), Case::Table(None),Case::Table(None),Case::ASSIETTE, Case::Table(None)],
-            vec![Case::Ingredient(pain), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::COUPER, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::COUPER, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::COUPER, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Table(None), Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Table(None), Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Ingredient(tomate), Case::Table(None),Case::Ingredient(salade),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None) ,Case::Table(None),Case::Ingredient(oignon),Case::Table(None),Case::Table(None),]        ];
-        
+            vec![
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::ASSIETTE,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Ingredient(pain),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::COUPER,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::COUPER,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::COUPER,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+                Case::Vide,
+                Case::Vide,
+                Case::Table(None),
+            ],
+            vec![
+                Case::Table(None),
+                Case::Ingredient(tomate),
+                Case::Table(None),
+                Case::Ingredient(salade),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Table(None),
+                Case::Ingredient(oignon),
+                Case::Table(None),
+                Case::Table(None),
+            ],
+        ];
+
         Self {
             player: Player::new((1, 1)),
             map,
@@ -64,12 +231,18 @@ impl Game {
         }
     }
 
+    pub fn ajouter_recette(&mut self, recette: Recette) {
+        self.recettes.push(recette);
+    }
 
-    
+    pub fn ajouter_recette_random(&mut self) {
+        self.recettes.push(Recette::new());
+    }
+
     pub fn move_player(&mut self, direction: Direction) -> ActionResult {
+        self.player.set_facing(direction);
         let check = self.check_move(direction);
         if check == ActionResult::Success {
-            self.player.set_facing(direction);
             let (wanted_pos, _) = self.get_target_position(direction);
             self.player.set_pos(wanted_pos.0, wanted_pos.1, direction);
         }
@@ -78,22 +251,22 @@ impl Game {
 
     pub fn check_move(&self, direction: Direction) -> ActionResult {
         let (wanted_pos, _) = self.get_target_position(direction);
-        
+
         if !self.is_position_valid(wanted_pos) {
             return ActionResult::InvalidPosition;
         }
-        
+
         if self.map[wanted_pos.1][wanted_pos.0] != Case::Vide {
             return ActionResult::Blocked;
         }
-        
+
         ActionResult::Success
     }
 
     fn get_target_position(&self, direction: Direction) -> ((usize, usize), Case) {
         let pos = self.player.get_pos();
         let mut target_pos = pos;
-        
+
         match direction {
             Direction::North if pos.1 > 0 => target_pos.1 -= 1,
             Direction::South if pos.1 < self.map.len() - 1 => target_pos.1 += 1,
@@ -101,10 +274,10 @@ impl Game {
             Direction::East if pos.0 < self.map[0].len() - 1 => target_pos.0 += 1,
             _ => return (pos, Case::Vide), // Position invalide
         }
-        
+
         (target_pos, self.map[target_pos.1][target_pos.0])
     }
-    
+
     fn is_position_valid(&self, pos: (usize, usize)) -> bool {
         pos.0 < self.map[0].len() && pos.1 < self.map.len()
     }
@@ -125,7 +298,7 @@ impl Game {
         if facing_pos.0 >= lenx || facing_pos.1 >= leny {
             return (facing_pos, Case::Vide);
         }
-        
+
         (facing_pos, self.map[facing_pos.1][facing_pos.0])
     }
 
@@ -134,9 +307,9 @@ impl Game {
         if check != ActionResult::Success {
             return check;
         }
-        
+
         let (facing_pos, facing_object) = self.get_facing();
-        
+
         match facing_object {
             Case::ASSIETTE => {
                 if let Some(ingredient) = self.assiette.pop() {
@@ -148,7 +321,6 @@ impl Game {
             }
             Case::Ingredient(object) => {
                 self.player.set_object_held(Some(object));
-                self.map[facing_pos.1][facing_pos.0] = Case::Vide;
                 ActionResult::Success
             }
             Case::Table(Some(ingredient)) => {
@@ -156,7 +328,7 @@ impl Game {
                 self.map[facing_pos.1][facing_pos.0] = Case::Table(None);
                 ActionResult::Success
             }
-            _ => ActionResult::NoTarget
+            _ => ActionResult::NoTarget,
         }
     }
 
@@ -164,7 +336,7 @@ impl Game {
         if self.player.get_object_held().is_some() {
             return ActionResult::HandsFull;
         }
-        
+
         let (_, facing_object) = self.get_facing();
         match facing_object {
             Case::Ingredient(_) | Case::Table(Some(_)) | Case::ASSIETTE => ActionResult::Success,
@@ -177,15 +349,15 @@ impl Game {
         if check != ActionResult::Success {
             return check;
         }
-        
+
         let (facing_pos, facing_object) = self.get_facing();
         let object_held = self.player.get_object_held().unwrap(); // Safe car on a vérifié dans check_deposit
-        
+
         match facing_object {
             Case::ASSIETTE => {
                 self.assiette.push(object_held);
                 self.player.set_object_held(None);
-                
+
                 // Vérifier si on a complété une recette
                 for i in 0..self.recettes.len() {
                     if self.assiette == *self.recettes[i].get_ingredients() {
@@ -208,7 +380,7 @@ impl Game {
                 self.player.set_object_held(Some(ingredient));
                 ActionResult::Success
             }
-            _ => ActionResult::NoTarget
+            _ => ActionResult::NoTarget,
         }
     }
 
@@ -216,7 +388,7 @@ impl Game {
         if self.player.get_object_held().is_none() {
             return ActionResult::HandsEmpty;
         }
-        
+
         let (_, facing_object) = self.get_facing();
         match facing_object {
             Case::Table(None) | Case::ASSIETTE | Case::COUPER => ActionResult::Success,
@@ -230,7 +402,7 @@ impl Game {
             return;
         }
         self.t += 1;
-        
+
         let mut removed_recettes = Vec::new();
         self.recettes.retain_mut(|recette| {
             recette.pass_time();
@@ -249,24 +421,31 @@ impl Game {
         }
     }
 
+    pub fn tick(&mut self) {
+        self.recettes.iter_mut().for_each(|recette| {
+            recette.update();
+        });
+        self.recettes.retain(|recette| !recette.is_too_late());
+    }
+
     pub fn robot(&mut self) {
         let next_recette = match self.recettes.last() {
             None => return,
             Some(recette) => recette,
         };
 
-        let mut ingredients_restant = next_recette.get_ingredients().clone().into_iter().collect::<HashSet<_>>();
+        let mut ingredients_restant = next_recette
+            .get_ingredients()
+            .clone()
+            .into_iter()
+            .collect::<HashSet<_>>();
         for ingredient in &self.assiette {
             ingredients_restant.remove(ingredient);
         }
 
         match self.player.get_object_held() {
-            None => {
-                
-            },
-            Some(_ingr) => {
-
-            },
+            None => {}
+            Some(_ingr) => {}
         };
     }
 }
