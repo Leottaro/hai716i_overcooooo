@@ -104,7 +104,7 @@ pub struct Recette {
     ingredients: Vec<Ingredient>,
     temps_restant: u32,
     temps_initial: u32,
-    last_update: Instant,  // Nouveau champ
+    last_update: Instant,
 }
 
 impl Recette {

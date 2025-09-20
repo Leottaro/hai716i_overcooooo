@@ -52,7 +52,6 @@ impl Default for App {
     fn default() -> Self {
         let mut map = vec![vec![".".to_string(); 20]; 15];
 
-        // Ajouter des murs autour de la map
         for x in 0..20 {
             map[0][x] = "#".to_string();
             map[14][x] = "#".to_string();
@@ -81,19 +80,17 @@ impl App {
 
     pub fn log(&mut self, message: String) {
         self.logs.push(message);
-        // Garder seulement les 100 derniers messages pour éviter la surcharge mémoire
         if self.logs.len() > 100 {
             self.logs.remove(0);
         }
     }
 
-    // Fonction utilitaire pour logger avec formatage
     pub fn log_fmt(&mut self, message: &str) {
         self.log(message.to_string());
     }
 
     pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
-        let tick_rate = Duration::from_millis(250); // 4 fois par seconde
+        let tick_rate = Duration::from_millis(250);
         let mut last_tick = Instant::now();
 
         loop {
@@ -147,7 +144,6 @@ impl App {
         let horizontal = Layout::horizontal([Percentage(67), Percentage(33)]);
         let [left_area, right_area] = horizontal.areas(main_area);
 
-        // Diviser le panneau droit en deux : infos (en haut) et logs (en bas)
         let right_vertical = Layout::vertical([Min(17), Percentage(80), Percentage(20)]);
         let [right_info_area, right_recipe_list, right_log_area] = right_vertical.areas(right_area);
         
@@ -161,9 +157,7 @@ impl App {
         );
         let recettes = self.game.get_recettes();
         let recette_height = 5;
-        // Calculer la zone avec padding (par exemple, 1 caractère tout autour)
         let padded_recipe_list = right_recipe_list.inner(Margin { vertical: 1, horizontal: 1 });
-        // Utiliser padded_recipe_list pour afficher les blocs de recettes
         frame.render_widget(
             Block::default()
                 .style(Style::default().bg(Color::Blue)),
@@ -186,7 +180,6 @@ impl App {
                         recette.get_temps_initial(),
                     )));
 
-            // Calculer la zone pour chaque recette
             let area = Rect {
                 x: padded_recipe_list.x,
                 y: padded_recipe_list.y + (i * recette_height) as u16,
@@ -194,16 +187,13 @@ impl App {
                 height: recette_height as u16,
             };
 
-            // Dessiner le bloc sur toute la zone
             frame.render_widget(recipe_box, area);
 
-            // Diviser la zone en deux (paragraphe + gauge)
             let [para_area, gauge_area] = Layout::vertical([
                 Length(recette_height as u16 - 1),
                 Length(1),
             ]).areas(area);
 
-            // Paragraphe avec padding
             let para_area_padded = para_area.inner(Margin { vertical: 1, horizontal: 1 });
             let recipe_paragraph = Paragraph::new(format!(
                 "Ingrédients : {}\nTemps restant :",
@@ -211,7 +201,6 @@ impl App {
             ));
             frame.render_widget(recipe_paragraph, para_area_padded);
 
-            // Gauge avec padding (optionnel, selon le rendu souhaité)
             let gauge_area_padded = gauge_area.inner(Margin { vertical: 0, horizontal: 1 });
             let percent = (recette.get_temps_restant() * 100 / recette.get_temps_initial()).min(100);
             let gauge = Gauge::default()
@@ -220,17 +209,13 @@ impl App {
                 .style(Style::default().fg(Color::Green).bg(Color::Black));
             frame.render_widget(gauge, gauge_area_padded);
         }
-
-        // Barre de titre
         frame.render_widget(Block::bordered().title("Overcook Dark Radé"), title_area);
 
-        // Barre de statut
         frame.render_widget(
             Block::bordered().title("Utilisez les flèches pour vous déplacer"),
             status_area,
         );
 
-        // Panneau gauche - bordure principale
         frame.render_widget(
             Block::bordered()
                 .title("Game")
@@ -238,7 +223,6 @@ impl App {
             left_area,
         );
 
-        // Calculer l'espace disponible à l'intérieur du panneau gauche
         let inner_area = Rect {
             x: left_area.x + 1,
             y: left_area.y + 1,
@@ -246,13 +230,11 @@ impl App {
             height: left_area.height.saturating_sub(2),
         };
 
-        // Calculer la taille de chaque cellule
         let map_width = self.game.get_map()[0].len() as u16;
         let map_height = self.game.get_map().len() as u16;
         let cell_width = inner_area.width / map_width;
         let cell_height = inner_area.height / map_height;
 
-        // Dessiner chaque cellule de la map comme un bloc
         for (y, row) in self.game.get_map().iter().enumerate() {
             for (x, cell) in row.iter().enumerate() {
                 let cell_area = Rect {
@@ -261,8 +243,6 @@ impl App {
                     width: cell_width,
                     height: cell_height,
                 };
-
-                // Choisir la couleur en fonction du contenu de la cellule
 
                 let (style, letter) = if (x, y) == player_pos {
                     (Style::default().bg(Color::Green).fg(Color::Black), "🧑‍🍳")
@@ -284,16 +264,14 @@ impl App {
                     }
                 };
 
-                // Créer un bloc pour cette cellule
                 let cell_block = Block::default().style(style);
                 frame.render_widget(cell_block, cell_area);
 
-                // Afficher l'emoji au centre du bloc
                 if cell_width >= 2 && cell_height >= 1 {
                     let text_area = Rect {
                         x: cell_area.x + cell_width / 2,
                         y: cell_area.y + cell_height / 2,
-                        width: 2, // Largeur augmentée pour les emojis
+                        width: 2,
                         height: 1,
                     };
                     let cell_paragraph = Paragraph::new(letter).style(style);
@@ -302,7 +280,6 @@ impl App {
             }
         }
 
-        // Panneau droit avec contenu des infos (partie supérieure)
         let right_paragraph = Paragraph::new(right_panel_content.as_str()).block(
             Block::bordered()
                 .title("Infos")
@@ -310,7 +287,6 @@ impl App {
         );
         frame.render_widget(right_paragraph, right_info_area);
 
-        // Panneau des logs (partie inférieure du panneau droit)
         let log_content = if self.logs.is_empty() {
             "Aucun log pour le moment...".to_string()
         } else {
