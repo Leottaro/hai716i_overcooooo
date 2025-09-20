@@ -11,11 +11,12 @@ fn main() -> Result<()> {
 }
 
 // fn main() {
-//     let mut game = Game::new();
+//     let mut game = HAI716I_POASMA::game::Game::new(3000000);
 //     loop {
+//         game.robot();
 //         game.update();
-//         print!("\x1B[2J\x1B[1;1H");
-//         println!("{}", game);
-//         std::thread::sleep(std::time::Duration::from_millis(200));
+//         // print!("\x1B[2J\x1B[1;1H");
+//         // println!("MAP:\n{}", game);
+//         // std::thread::sleep(std::time::Duration::from_millis(200));
 //     }
 // }

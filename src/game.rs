@@ -1,4 +1,4 @@
-use std::{cmp::min, usize};
+use std::{collections::HashSet, usize};
 use crate::{
     objets::{Case, Direction, Ingredient, IngredientType, Recette, RobotAction},
     player::Player, RECETTE_RANGE
@@ -226,31 +226,28 @@ impl Game {
         };
         
         let (x, y) = self.player.get_pos();
-        let chemin = match self.player.get_object_held() {
-            None => {
-                let chemin = match self.pathfind_case((x, y), Case::Ingredient(next_ingredient.type_ingredient)) {
-                    None => return RobotAction::None,
-                    Some(chemin) => chemin,
-                };
-                chemin
-            },
+        let objective = match self.player.get_object_held() {
+            None => Case::Ingredient(next_ingredient.type_ingredient),
             Some(ingr) => {
                 if ingr.etat == next_ingredient.etat {
-                    let chemin = match self.pathfind_case((x, y), Case::ASSIETTE) {
-                        None => return RobotAction::None,
-                        Some(chemin) => chemin,
-                    };
-                    chemin
+                    Case::ASSIETTE
                 } else {
-                    let chemin = match self.pathfind_case((x, y), Case::COUPER) {
-                        None => return RobotAction::None,
-                        Some(chemin) => chemin,
-                    };
-                    chemin
+                    Case::COUPER
                 }
             },
         };
 
+        // let recipes_str = self.recettes.iter().map(Recette::to_string).collect::<Vec<_>>().join("\n");
+        // let assiette_str = self.assiette.iter().map(Ingredient::to_string).collect::<Vec<_>>().join(", ");
+        // let player_str = format!("{:?}", self.player);
+        // let objective_str = format!("{:?}", objective);
+        // println!("\nASSIETTE: {assiette_str}\nRECIPES: {recipes_str}\nPLAYER: {player_str}\nOBJECTIVE: {objective_str}");
+
+        let chemin = match self.pathfind_case((x, y), objective) {
+            None => return RobotAction::None,
+            Some(chemin) => chemin,
+        };
+        
         let next_pos = match chemin.get(1) {
             Some(value) => value.clone(),
             None => return RobotAction::None,
@@ -265,39 +262,53 @@ impl Game {
         };
         
         if chemin.len() != 2 || self.player.get_facing() != direction {
+            // println!("ACTION: {:?}", RobotAction::Deplacer(direction));
             return RobotAction::Deplacer(direction);
         }
 
         if self.player.get_object_held().is_none() {
+            // println!("ACTION: {:?}", RobotAction::Pickup);
             RobotAction::Pickup
         } else {
+            // println!("ACTION: {:?}", RobotAction::Deposit);
             RobotAction::Deposit
         }
     }
 
-    fn pathfind_case(&self, start: (usize, usize), case: Case) -> Option<Vec<(usize, usize)>> { // TODO: FIX ASSIETTE -> PAIN INFINITE LOOP
+    fn pathfind_case(&self, start: (usize, usize), case: Case) -> Option<Vec<(usize, usize)>> {
         let mut weights: Vec<Vec<usize>> = vec![vec![usize::MAX; self.map[0].len()]; self.map.len()];
-        weights[start.1][start.0] = 0;
+        let mut explored_positions: HashSet<(usize, usize)> = HashSet::new();
         let mut next_positions: Vec<(usize, usize)> = vec![start];
+        weights[start.1][start.0] = 0;
+        // println!("WEIGHTS:\n{}", weights.iter().map(|line| line.iter().map(|weight| if *weight == usize::MAX {"XX".to_string()} else {format!("{weight:2}")}).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>().join("\n"));
         
         let mut found_pos: Option<(usize, usize)> = None;
         while let Some((x, y)) = next_positions.pop() {
+            if !explored_positions.insert((x,y)) {
+                continue;
+            }
+
             let mut min_neighbour = usize::MAX;
             for (x1, y1) in self.get_neighbours(x, y) {
                 if weights[y1][x1] == usize::MAX {
-                    if self.map[y1][x1] == case {
-                        found_pos = Some((x1, y1));
-                        break;
-                    } else if self.map[y1][x1] == Case::Vide {
+                    if self.map[y1][x1] == Case::Vide {
                         next_positions.insert(0, (x1,y1));
-                    }
-                } else {
-                    min_neighbour = min(min_neighbour, weights[y1][x1]);
+                    } else if self.map[y1][x1] == case {
+                        found_pos = Some((x1, y1));
+                    } 
+                } else if weights[y1][x1] < min_neighbour  {
+                    min_neighbour = weights[y1][x1];
                 }
             }
+
             if min_neighbour != usize::MAX {
                 weights[y][x] = min_neighbour + 1;
+                // println!("WEIGHTS: (checked {x},{y})\n{}", weights.iter().map(|line| line.iter().map(|weight| if *weight == usize::MAX {"XX".to_string()} else {format!("{weight:2}")}).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>().join("\n"));
             } 
+
+            if found_pos.is_some() {
+                break;
+            }
         }
 
         if found_pos.is_none() {
@@ -327,8 +338,14 @@ impl Game {
                     min_val = weights[y1][x1];
                 }
             }
-            path.insert(0, (min_x, min_y));
+            if min_val != usize::MAX {
+                path.insert(0, (min_x, min_y));
+            }
         }
+
+        // let path_str = path.iter().map(|(x,y)| format!("({x},{y})")).collect::<Vec<_>>().join(", ");
+        // let weights_str = weights.into_iter().map(|line| line.into_iter().map(|weight| if weight == usize::MAX {"XX".to_string()} else {format!("{weight:2}")}).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>().join("\n");
+        // println!("PATH: {path_str}\nWEIGHTS:\n{weights_str}");
 
         Some(path)
     }
@@ -340,14 +357,14 @@ impl std::fmt::Display for Game {
             let line = row
                 .iter().enumerate()
                 .map(|(x, case)| match case {
-                    Case::Vide => if (x, y) == self.player.get_pos() {'·'} else {' '},
-                    Case::Table(None) => '#',
-                    Case::Table(Some(ingredient)) => ingredient.type_ingredient.char(),
-                    Case::Ingredient(ingredient_type) => ingredient_type.upper_char(),
-                    Case::COUPER => 'C',
-                    Case::ASSIETTE => 'O',
-                })
-                .fold(String::new(), |c1, c2| format!("{c1} {c2}"));
+                    Case::Vide => if (x, y) == self.player.get_pos() {"·".to_string()} else {" ".to_string()},
+                    Case::Table(None) => "#".to_string(),
+                    Case::Table(Some(ingredient)) => ingredient.type_ingredient.char().to_string(),
+                    Case::Ingredient(ingredient_type) => ingredient_type.upper_char().to_string(),
+                    Case::COUPER => "C".to_string(),
+                    Case::ASSIETTE => "O".to_string(),
+                }).collect::<Vec<_>>()
+                .join(" ");
 
             writeln!(f, "{line}")?;
         }
@@ -357,14 +374,15 @@ impl std::fmt::Display for Game {
             .recettes
             .iter()
             .map(Recette::to_string)
-            .fold(String::new(), |r1, r2| format!("{r1} | {r2}"));
+            .collect::<Vec<_>>().join("\n");
         writeln!(f, "Recettes voulues : {}", line)?;
 
         let line = self
             .assiette
             .iter()
             .map(Ingredient::to_string)
-            .fold(String::new(), |i1, i2| format!("{i1},{i2}"));
+            .collect::<Vec<_>>()
+            .join(", ");
         writeln!(f, "Assiette : {line}")?;
 
         Ok(())

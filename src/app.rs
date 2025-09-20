@@ -49,15 +49,16 @@ impl App {
     }
 
     pub fn run(&mut self, mut terminal: DefaultTerminal) -> Result<()> {
+        self.right_panel_content = format!("Player_held: {:#?}\n\nAssiette: {:#?}\n\nRecettes: {:#?}", self.game.get_player().get_object_held(), self.game.get_assiette(), self.game.get_recettes());
+        terminal.draw(|frame| self.draw(frame))?;
         loop {
             self.game.robot();
-            self.game.update();
-            terminal.draw(|frame| self.draw(frame))?;
+            self.game.update();terminal.draw(|frame| self.draw(frame))?;
             // self.handle_events()?;
             if self.should_quit {
                 break Ok(());
             }
-            sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(200));
         }
     }
 
@@ -97,7 +98,7 @@ impl App {
         let cell_width = inner_area.width / map_width;
         let cell_height = inner_area.height / map_height;
 
-        let player_pos = self.game.get_player().get_pos();
+        let player = self.game.get_player();
         // Dessiner chaque cellule de la map comme un bloc
         for (y, row) in self.game.get_map().iter().enumerate() {
             for (x, cell) in row.iter().enumerate() {
@@ -111,17 +112,19 @@ impl App {
                 // Choisir la couleur en fonction du contenu de la cellule
 
 
-                let (style, letter) = if (x, y) == player_pos {
-                    (Style::default().bg(Color::Green).fg(Color::Black), '@')
-                } 
-                else {match cell {
-                    Case::Table(None) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), 'T'),
-                    Case::Table(Some(ingr)) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), ingr.type_ingredient.char()),
-                    Case::Ingredient(ingr) => (Style::default().bg(Color::Red).fg(Color::White), ingr.char()),
-                    Case::COUPER => (Style::default().bg(Color::LightBlue).fg(Color::Black), 'C'),
-                    Case::ASSIETTE => (Style::default().bg(Color::White).fg(Color::Black), 'A'),
-                    _ => (Style::default().bg(Color::Black).fg(Color::White), ' '),
-                }};
+                let (style, letter) = if (x, y) == player.get_pos() {
+                    (Style::default().bg(Color::Green).fg(Color::Black), player.char())
+                }
+                else {
+                    match cell {
+                        Case::Table(None) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), 'T'),
+                        Case::Table(Some(ingr)) => (Style::default().bg(Color::Rgb(142, 73, 26)).fg(Color::White), ingr.type_ingredient.char()),
+                        Case::Ingredient(ingr) => (Style::default().bg(Color::Red).fg(Color::White), ingr.char()),
+                        Case::COUPER => (Style::default().bg(Color::LightBlue).fg(Color::Black), 'C'),
+                        Case::ASSIETTE => (Style::default().bg(Color::White).fg(Color::Black), 'A'),
+                        _ => (Style::default().bg(Color::Black).fg(Color::White), ' '),
+                    }
+                };
 
                 // Créer un bloc pour cette cellule
                 let cell_block = Block::default().style(style);
@@ -155,22 +158,24 @@ impl App {
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
                 KeyCode::Char('q') => self.should_quit = true,
-                KeyCode::Char('p') => {
-                    self.title = "Nouveau Titre !".to_string();
-                }
-                KeyCode::Char('s') => {
-                    self.status = "Statut modifié !".to_string();
-                }
-                KeyCode::Char('l') => {
-                    self.left_panel_title = "Panneau Gauche Modifié".to_string();
-                }
-                KeyCode::Char('r') => {
-                    self.right_panel_title = "Panneau Droit Modifié".to_string();
-                }
+                // KeyCode::Char('p') => {
+                //     self.title = "Nouveau Titre !".to_string();
+                // }
+                // KeyCode::Char('s') => {
+                //     self.status = "Statut modifié !".to_string();
+                // }
+                // KeyCode::Char('l') => {
+                //     self.left_panel_title = "Panneau Gauche Modifié".to_string();
+                // }
+                // KeyCode::Char('r') => {
+                //     self.right_panel_title = "Panneau Droit Modifié".to_string();
+                // }
                 KeyCode::Up => self.game.move_player(Direction::North),
                 KeyCode::Down => self.game.move_player(Direction::South),
                 KeyCode::Left => self.game.move_player(Direction::West),
                 KeyCode::Right => self.game.move_player(Direction::East),
+                KeyCode::Char('p') => self.game.pickup(),
+                KeyCode::Char('d') => self.game.deposit(),
                 _ => {}
             },
             _ => {}

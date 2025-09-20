@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use crate::objets::{Direction, Ingredient};
 
 #[derive(Debug, PartialEq, Clone)]

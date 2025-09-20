@@ -21,18 +21,6 @@ pub enum IngredientType {
     Oignon,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub enum IngredientEtat {
-    Normal,
-    Coupe,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub struct Ingredient {
-    pub type_ingredient: IngredientType,
-    pub etat: IngredientEtat,
-}
-
 impl IngredientType {
     pub fn char(&self) -> char {
         match self {
@@ -46,6 +34,40 @@ impl IngredientType {
     pub fn upper_char(&self) -> char {
         self.char().to_uppercase().next().unwrap()
     }
+}
+
+impl Display for IngredientType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            IngredientType::Pain => "Pain",
+            IngredientType::Salade => "Salade",
+            IngredientType::Tomate => "Tomate",
+            IngredientType::Oignon => "Oignon",
+        };
+        write!(f, "{str}")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub enum IngredientEtat {
+    Normal,
+    Coupe,
+}
+
+impl Display for IngredientEtat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            IngredientEtat::Normal => "Normal",
+            IngredientEtat::Coupe => "Coupé",
+        };
+        write!(f, "{str}")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct Ingredient {
+    pub type_ingredient: IngredientType,
+    pub etat: IngredientEtat,
 }
 
 impl Ingredient {
@@ -63,17 +85,8 @@ impl Ingredient {
 
 impl Display for Ingredient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
+        write!(f, "{} {}", self.type_ingredient, self.etat)
     }
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Case {
-    Vide,
-    Table(Option<Ingredient>),
-    Ingredient(IngredientType),
-    COUPER,
-    ASSIETTE,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -128,10 +141,19 @@ impl Display for Recette {
         let ingredients = self.ingredients
                     .iter()
                     .map(Ingredient::to_string)
-                    .fold(String::new(), |i1, i2| format!("{i1},{i2}"));
+                    .collect::<Vec<_>>().join(", ");
         let temps = self.deadline;
-        write!(f, "{temps}:{ingredients}")
+        write!(f, "{temps}t, [{ingredients}]")
     }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Case {
+    Vide,
+    Table(Option<Ingredient>),
+    Ingredient(IngredientType),
+    COUPER,
+    ASSIETTE,
 }
 
 #[derive(Debug)]
