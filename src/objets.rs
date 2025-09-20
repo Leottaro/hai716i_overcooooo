@@ -4,7 +4,7 @@ use rand::{seq::IndexedRandom, Rng};
 
 use crate::DEADLINE_RANGE;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 
 pub enum Direction {
     North,
@@ -13,7 +13,7 @@ pub enum Direction {
     East,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum IngredientType {
     Pain,
     Salade,
@@ -21,13 +21,13 @@ pub enum IngredientType {
     Oignon,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum IngredientEtat {
     Normal,
     Coupe,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Ingredient {
     pub type_ingredient: IngredientType,
     pub etat: IngredientEtat,
@@ -136,7 +136,7 @@ impl Display for Recette {
 
 #[derive(Debug)]
 pub enum RobotAction {
-    Deplacer(Vec<(usize, usize)>, Direction),
+    Deplacer(Direction),
     Pickup,
     Deposit,
     None,

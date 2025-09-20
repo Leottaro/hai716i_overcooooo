@@ -1,7 +1,6 @@
-use std::collections::HashSet;
-
+use std::{cmp::min, usize};
 use crate::{
-    objets::{Case, Direction, Ingredient, IngredientEtat, IngredientType, Recette, RobotAction},
+    objets::{Case, Direction, Ingredient, IngredientType, Recette, RobotAction},
     player::Player, RECETTE_RANGE
 };
 
@@ -16,8 +15,6 @@ pub struct Game {
     next_recette: usize,
     t: usize,
     max_t: usize,
-
-    recent_path: Vec<(usize, usize)>
 }
 
 impl Game {
@@ -25,8 +22,17 @@ impl Game {
         &self.player
     }
 
+    pub fn get_assiette(&self) -> &Vec<Ingredient> {
+        &self.assiette
+    }
+        
     pub fn get_map(&self) -> &Vec<Vec<Case>> {
         &self.map
+    }
+
+
+    pub fn get_recettes(&self) -> &Vec<Recette> {
+        &self.recettes
     }
 
     pub fn get_map_heigth(&self) -> usize {
@@ -59,47 +65,10 @@ impl Game {
             t: 0,
             max_t,
             next_recette: rand::random_range(RECETTE_RANGE),
-            recent_path: Vec::new(),
         }
     }
 
-    fn move_coords(&self, direction: Direction, coords: (usize, usize)) -> Option<(usize, usize)> {
-        match direction {
-            Direction::North => {
-                if coords.1 > 0 {
-                    return Some((coords.0, coords.1 - 1));
-                }
-            },
-            Direction::West => {
-                if coords.0 > 0 {
-                    return Some((coords.0 - 1, coords.1));
-                }
-            },
-            Direction::South => {
-                if coords.1 < self.map.len()-1 {
-                    return Some((coords.0, coords.1 + 1));
-                }
-            },
-            Direction::East => {
-                if coords.0 < self.map.len()-1 {
-                    return Some((coords.0 + 1, coords.1));
-                }
-            },
-        }
-        return None;
-    }
-    
-    pub fn move_player(&mut self, direction: Direction) {
-        self.player.set_facing(direction);
-        let wanted_pos: (usize, usize) = self.get_facing().0;
-        if self.map[wanted_pos.1][wanted_pos.0] == Case::Vide  {
-            self.player.set_pos(wanted_pos.0, wanted_pos.1, direction);
-        }
-        
-    }
-
-    pub fn get_facing(&self) -> ((usize, usize), Case) {
-        let pos: (usize, usize) = self.player.get_pos();
+    fn get_facing(&self, pos: (usize, usize)) -> ((usize, usize), Case) {
         let mut facing_pos: (usize, usize) = pos;
         let lenx: usize = self.map[0].len();
         let leny: usize = self.map.len();
@@ -117,8 +86,34 @@ impl Game {
         return (facing_pos, self.map[facing_pos.1][facing_pos.0]);
     }
     
+    fn get_neighbours(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
+        let mut neighbours = Vec::new();
+        if x > 0 {
+            neighbours.push((x-1, y));
+        }
+        if y > 0 {
+            neighbours.push((x, y-1));
+        }
+        if x < self.map[0].len() - 1 {
+            neighbours.push((x+1, y));
+        }
+        if y < self.map.len() - 1 {
+            neighbours.push((x, y+1));
+        }
+        neighbours
+    }
+
+    pub fn move_player(&mut self, direction: Direction) {
+        self.player.set_facing(direction);
+        let wanted_pos: (usize, usize) = self.get_facing(self.player.get_pos()).0;
+        if self.map[wanted_pos.1][wanted_pos.0] == Case::Vide  {
+            self.player.set_pos(wanted_pos.0, wanted_pos.1, direction);
+        }
+        
+    }
+    
     pub fn pickup(&mut self) {
-        let (facing_pos, facing_object) = self.get_facing();
+        let (facing_pos, facing_object) = self.get_facing(self.player.get_pos());
         
         let object_held = self.player.get_object_held();
         
@@ -143,8 +138,8 @@ impl Game {
     }
     
     pub fn deposit(&mut self) {        
-        let (facing_pos, facing_object) = self.get_facing();
-        let mut object_held = match self.player.get_object_held() {
+        let (facing_pos, facing_object) = self.get_facing(self.player.get_pos());
+        let mut object_held = match self.player.take_object_held() {
             None => return,
             Some(obj) => obj,
         };
@@ -152,16 +147,15 @@ impl Game {
         match facing_object {
             Case::ASSIETTE => {
                         self.assiette.push(object_held);
-                        for i in 0..self.recettes.len() {
-                            if self.assiette == *self.recettes[i].get_ingredients() {
-                                self.score += self.assiette.len() as i32;
-                                self.assiette = vec![];
-                                self.recettes.remove(i);
-                            }
+                        let recette_correspondante = self.recettes.iter().position(|recette| self.assiette.eq(recette.get_ingredients()));
+                        if let Some(i) = recette_correspondante {
+                            self.score += self.assiette.len() as i32;
+                            self.assiette = vec![];
+                            self.recettes.remove(i);
                         }
                     }
             Case::Table(None) => {
-                        self.map[facing_pos.1][facing_pos.0] = Case::Table(self.player.get_object_held());
+                        self.map[facing_pos.1][facing_pos.0] = Case::Table(Some(object_held));
                     }
             Case::Table(_) => {}
             Case::COUPER => {
@@ -198,30 +192,15 @@ impl Game {
     }
 
     pub fn robot(&mut self) {
-        if self.recent_path.len() == 1 {
-            let (x, y) = self.player.get_pos();
-            let next_pos = self.recent_path.remove(0);
-            let direction = match next_pos {
-                (x1, y1) if (x1, y1) == (x, y - 1)  => Direction::North,
-                (x1, y1) if (x1, y1) == (x, y + 1)  => Direction::South,
-                (x1, y1) if (x1, y1) == (x - 1, y)  => Direction::West,
-                (x1, y1) if (x1, y1) == (x + 1, y)  => Direction::East,
-                _ => panic!("aaaaaa"),
-            };
-            self.move_player(direction)
-        }
-
         let action = self.determine_action();
         match action {
-            RobotAction::Deplacer(chemin, direction) => {
-                self.recent_path = chemin;
+            RobotAction::Deplacer(direction) => {
                 self.move_player(direction)
             },
             RobotAction::Pickup => {
                 self.pickup()
             },
-            RobotAction::Deposit => 
-            {
+            RobotAction::Deposit => {
                 self.deposit()
             },
             RobotAction::None => (),
@@ -234,34 +213,36 @@ impl Game {
             Some(recette) => recette,
         };
 
-        let mut ingredients_restant = next_recette.get_ingredients().clone().into_iter().collect::<HashSet<_>>();
-        for ingredient in &self.assiette {
-            ingredients_restant.remove(ingredient);
+        let mut ingredients_restant = next_recette.get_ingredients().clone();
+        for ingredient in self.assiette.iter() {
+            if let Some(i) = ingredients_restant.iter().position(|ingr| ingr.eq(ingredient)) {
+                ingredients_restant.remove(i);
+            }
         }
+
+        let next_ingredient = match ingredients_restant.iter().next() {
+            None => return RobotAction::None,
+            Some(ingr) => ingr.clone(),
+        };
         
         let (x, y) = self.player.get_pos();
         let chemin = match self.player.get_object_held() {
             None => {
-                let next_ingredient = match ingredients_restant.iter().next() {
-                    None => return RobotAction::None,
-                    Some(ingr) => ingr.clone(),
-                };
-
-                let chemin = match self.pathfind_case(vec![(x, y)], Case::Ingredient(next_ingredient.type_ingredient)) {
+                let chemin = match self.pathfind_case((x, y), Case::Ingredient(next_ingredient.type_ingredient)) {
                     None => return RobotAction::None,
                     Some(chemin) => chemin,
                 };
                 chemin
             },
             Some(ingr) => {
-                if ingr.etat == IngredientEtat::Coupe {
-                    let chemin = match self.pathfind_case(vec![(x, y)], Case::ASSIETTE) {
+                if ingr.etat == next_ingredient.etat {
+                    let chemin = match self.pathfind_case((x, y), Case::ASSIETTE) {
                         None => return RobotAction::None,
                         Some(chemin) => chemin,
                     };
                     chemin
                 } else {
-                    let chemin = match self.pathfind_case(vec![(x, y)], Case::COUPER) {
+                    let chemin = match self.pathfind_case((x, y), Case::COUPER) {
                         None => return RobotAction::None,
                         Some(chemin) => chemin,
                     };
@@ -283,8 +264,8 @@ impl Game {
             _ => return RobotAction::None,
         };
         
-        if chemin.len() != 2 || self.player.get_facing() == direction {
-            return RobotAction::Deplacer(chemin, direction);
+        if chemin.len() != 2 || self.player.get_facing() != direction {
+            return RobotAction::Deplacer(direction);
         }
 
         if self.player.get_object_held().is_none() {
@@ -294,74 +275,98 @@ impl Game {
         }
     }
 
-    fn pathfind_case(&self, current_path: Vec<(usize, usize)>, case: Case) -> Option<Vec<(usize, usize)>> {
-        let (x, y) = current_path.last().unwrap().clone();
+    fn pathfind_case(&self, start: (usize, usize), case: Case) -> Option<Vec<(usize, usize)>> { // TODO: FIX ASSIETTE -> PAIN INFINITE LOOP
+        let mut weights: Vec<Vec<usize>> = vec![vec![usize::MAX; self.map[0].len()]; self.map.len()];
+        weights[start.1][start.0] = 0;
+        let mut next_positions: Vec<(usize, usize)> = vec![start];
         
-        if self.map[y][x] == case {
-            return Some(current_path);
+        let mut found_pos: Option<(usize, usize)> = None;
+        while let Some((x, y)) = next_positions.pop() {
+            let mut min_neighbour = usize::MAX;
+            for (x1, y1) in self.get_neighbours(x, y) {
+                if weights[y1][x1] == usize::MAX {
+                    if self.map[y1][x1] == case {
+                        found_pos = Some((x1, y1));
+                        break;
+                    } else if self.map[y1][x1] == Case::Vide {
+                        next_positions.insert(0, (x1,y1));
+                    }
+                } else {
+                    min_neighbour = min(min_neighbour, weights[y1][x1]);
+                }
+            }
+            if min_neighbour != usize::MAX {
+                weights[y][x] = min_neighbour + 1;
+            } 
         }
 
-        if self.map[y][x] != Case::Vide {
+        if found_pos.is_none() {
             return None;
         }
+        let mut path = vec![found_pos.unwrap()];
 
-        for direction in vec![Direction::North, Direction::West, Direction::South, Direction::East] {
-            let next_case = self.move_coords(direction, (x, y));
-            match next_case {
-                None => (),
-                Some(value) => {
-                    if current_path.contains(&value) {
-                        continue;
+        loop {
+            let (x, y) = match path.first().cloned() {
+                None => break,
+                Some(pos) => {
+                    if pos == start {
+                        break;
+                    } else {
+                        pos
                     }
+                }
+            };
 
-                    let mut next_path = current_path.clone();
-                    next_path.push(value);
-                    
-                    match self.pathfind_case(next_path, case) {
-                        None => (),
-                        Some(chemin) => return Some(chemin),
-                    }
-                },
+            let mut min_x = 0;
+            let mut min_y = 0;
+            let mut min_val = usize::MAX;
+            for (x1, y1) in self.get_neighbours(x, y) {
+                if weights[y1][x1] < min_val {
+                    min_x = x1;
+                    min_y = y1;
+                    min_val = weights[y1][x1];
+                }
             }
+            path.insert(0, (min_x, min_y));
         }
 
-        return None;
+        Some(path)
     }
 }
 
-// impl std::fmt::Display for Game {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         for (y, row) in self.map.iter().enumerate() {
-//             let line = row
-//                 .iter().enumerate()
-//                 .map(|(x, case)| match case {
-//                     Case::Vide => if (x, y) == self.player.get_pos() {'·'} else {' '},
-//                     Case::Table(None) => '#',
-//                     Case::Table(Some(ingredient)) => ingredient.char(),
-//                     Case::Ingredient(ingredient) => ingredient.upper_char(),
-//                     Case::COUPER => 'C',
-//                     Case::ASSIETTE => 'O',
-//                 })
-//                 .fold(String::new(), |c1, c2| format!("{c1} {c2}"));
+impl std::fmt::Display for Game {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (y, row) in self.map.iter().enumerate() {
+            let line = row
+                .iter().enumerate()
+                .map(|(x, case)| match case {
+                    Case::Vide => if (x, y) == self.player.get_pos() {'·'} else {' '},
+                    Case::Table(None) => '#',
+                    Case::Table(Some(ingredient)) => ingredient.type_ingredient.char(),
+                    Case::Ingredient(ingredient_type) => ingredient_type.upper_char(),
+                    Case::COUPER => 'C',
+                    Case::ASSIETTE => 'O',
+                })
+                .fold(String::new(), |c1, c2| format!("{c1} {c2}"));
 
-//             writeln!(f, "{line}")?;
-//         }
-//         writeln!(f)?;
+            writeln!(f, "{line}")?;
+        }
+        writeln!(f)?;
 
-//         let line = self
-//             .recettes
-//             .iter()
-//             .map(Recette::to_string)
-//             .fold(String::new(), |r1, r2| format!("{r1} | {r2}"));
-//         writeln!(f, "Recettes voulues : {}", line)?;
+        let line = self
+            .recettes
+            .iter()
+            .map(Recette::to_string)
+            .fold(String::new(), |r1, r2| format!("{r1} | {r2}"));
+        writeln!(f, "Recettes voulues : {}", line)?;
 
-//         let line = self
-//             .assiette
-//             .iter()
-//             .map(Ingredient::to_string)
-//             .fold(String::new(), |i1, i2| format!("{i1},{i2}"));
-//         writeln!(f, "Assiette : {line}")?;
+        let line = self
+            .assiette
+            .iter()
+            .map(Ingredient::to_string)
+            .fold(String::new(), |i1, i2| format!("{i1},{i2}"));
+        writeln!(f, "Assiette : {line}")?;
 
-//         Ok(())
-//     }
-// }
+        Ok(())
+    }
+}
