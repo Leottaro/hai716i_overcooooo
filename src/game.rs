@@ -1,5 +1,6 @@
 use std::{collections::HashSet, usize};
 use crate::{
+    RECETTE_RANGE,
     objets::{Case, Direction, Ingredient, IngredientType, Recette, RobotAction},
     player::Player, RECETTE_RANGE
 };
@@ -10,7 +11,7 @@ pub struct Game {
     assiette: Vec<Ingredient>,
     map: Vec<Vec<Case>>,
     recettes: Vec<Recette>,
-    
+
     score: i32,
     next_recette: usize,
     t: usize,
@@ -21,18 +22,17 @@ impl Game {
     pub fn get_player(&self) -> &Player {
         &self.player
     }
-
+  
     pub fn get_assiette(&self) -> &Vec<Ingredient> {
         &self.assiette
+    }
+ 
+    pub fn get_recettes(&self) -> &Vec<Recette> {
+        &self.recettes
     }
         
     pub fn get_map(&self) -> &Vec<Vec<Case>> {
         &self.map
-    }
-
-
-    pub fn get_recettes(&self) -> &Vec<Recette> {
-        &self.recettes
     }
 
     pub fn get_map_heigth(&self) -> usize {
@@ -54,7 +54,8 @@ impl Game {
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
             vec![Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None), Case::Vide, Case::Vide, Case::Table(None)],
-            vec![Case::Table(None), Case::Ingredient(IngredientType::Tomate), Case::Table(None),Case::Ingredient(IngredientType::Salade),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None) ,Case::Table(None),Case::Ingredient(IngredientType::Oignon),Case::Table(None),Case::Table(None),]        ];
+            vec![Case::Table(None), Case::Ingredient(IngredientType::Tomate), Case::Table(None),Case::Ingredient(IngredientType::Salade),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None),Case::Table(None) ,Case::Table(None),Case::Ingredient(IngredientType::Oignon),Case::Table(None),Case::Table(None)]
+        ];
         
         Self {
             player: Player::new((1, 1)),
@@ -67,6 +68,7 @@ impl Game {
             next_recette: rand::random_range(RECETTE_RANGE),
         }
     }
+
 
     fn get_facing(&self, pos: (usize, usize)) -> ((usize, usize), Case) {
         let mut facing_pos: (usize, usize) = pos;
@@ -83,9 +85,10 @@ impl Game {
         if facing_pos.0 >= lenx || facing_pos.1 >= leny {
             return (facing_pos, Case::Vide);
         }
-        return (facing_pos, self.map[facing_pos.1][facing_pos.0]);
+
+        (facing_pos, self.map[facing_pos.1][facing_pos.0])
     }
-    
+  
     fn get_neighbours(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
         let mut neighbours = Vec::new();
         if x > 0 {
@@ -120,11 +123,18 @@ impl Game {
         if object_held != None{
             return;
         }
-        
+
+        let (facing_pos, facing_object) = self.get_facing();
+
         match facing_object {
             Case::ASSIETTE => {
-                        self.player.set_object_held(self.assiette.pop());
-                    }
+                if let Some(ingredient) = self.assiette.pop() {
+                    self.player.set_object_held(Some(ingredient));
+                    ActionResult::Success
+                } else {
+                    ActionResult::NoTarget
+                }
+            }
             Case::Ingredient(object) => {
                         self.player.set_object_held(Some(Ingredient::new(object)));
                     }
@@ -154,15 +164,33 @@ impl Game {
                             self.recettes.remove(i);
                         }
                     }
+                }
+                ActionResult::Success
+            }
             Case::Table(None) => {
                         self.map[facing_pos.1][facing_pos.0] = Case::Table(Some(object_held));
                     }
             Case::Table(_) => {}
             Case::COUPER => {
-                object_held.couper();
-                self.player.set_object_held(Some(object_held));
+                let mut ingredient = object_held;
+                ingredient.couper();
+                self.player.set_object_held(Some(ingredient));
+                ActionResult::Success
             }
-            _ => {}
+            _ => ActionResult::NoTarget,
+        }
+    }
+
+    pub fn check_deposit(&self) -> ActionResult {
+        if self.player.get_object_held().is_none() {
+            return ActionResult::HandsEmpty;
+        }
+
+        let (_, facing_object) = self.get_facing();
+        match facing_object {
+            Case::Table(None) | Case::ASSIETTE | Case::COUPER => ActionResult::Success,
+            Case::Table(Some(_)) => ActionResult::TableOccupied,
+            _ => ActionResult::NoTarget,
         }
     }
 
@@ -171,7 +199,7 @@ impl Game {
             return;
         }
         self.t += 1;
-        
+
         let mut removed_recettes = Vec::new();
         self.recettes.retain_mut(|recette| {
             recette.pass_time();
@@ -189,6 +217,13 @@ impl Game {
             self.recettes.push(Recette::new());
             self.next_recette = rand::random_range(RECETTE_RANGE);
         }
+    }
+
+    pub fn tick(&mut self) {
+        self.recettes.iter_mut().for_each(|recette| {
+            recette.update();
+        });
+        self.recettes.retain(|recette| !recette.is_too_late());
     }
 
     pub fn robot(&mut self) {

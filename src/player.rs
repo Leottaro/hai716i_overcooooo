@@ -7,7 +7,6 @@ pub struct Player {
     facing: Direction,
 }
 
-
 impl Player {
     pub fn new(position: (usize, usize)) -> Self {
         Self {
@@ -18,7 +17,7 @@ impl Player {
     }
 
     pub fn get_pos(&self) -> (usize, usize) {
-        return self.position;
+        self.position
     }
 
     pub fn set_pos(&mut self, x: usize, y: usize, direction: Direction) {
@@ -27,7 +26,7 @@ impl Player {
     }
 
     pub fn get_facing(&self) -> Direction {
-        return self.facing;
+        self.facing
     }
 
     pub fn set_facing(&mut self, direction: Direction) {
@@ -35,9 +34,8 @@ impl Player {
     }
 
     pub fn get_object_held(&self) -> Option<Ingredient> {
-        return self.object_held;
+        self.object_held
     }
-
 
     pub fn take_object_held(&mut self) -> Option<Ingredient> {
         self.object_held.take()
@@ -46,7 +44,7 @@ impl Player {
     pub fn set_object_held(&mut self, object: Option<Ingredient>){
         self.object_held = object
     }
-
+  
     pub fn char(&self) -> char {
         match self.get_facing() {
             Direction::North => '↑',
