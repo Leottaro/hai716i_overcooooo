@@ -44,13 +44,4 @@ impl Player {
     pub fn set_object_held(&mut self, object: Option<Ingredient>){
         self.object_held = object
     }
-  
-    pub fn char(&self) -> char {
-        match self.get_facing() {
-            Direction::North => '↑',
-            Direction::West => '←',
-            Direction::South => '↓',
-            Direction::East => '→',
-        }
-    }
 }

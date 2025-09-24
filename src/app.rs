@@ -1,7 +1,7 @@
 use crate::game::Game;
-use crate::objets::{ActionResult, Case, Direction};
+use crate::objets::{Case, DepositError, Direction, PickupError};
 use color_eyre::Result;
-use std::{thread::sleep, time::Duration};
+use std::{time::{Duration, Instant}};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
 use ratatui::prelude::Backend;
@@ -12,7 +12,6 @@ use ratatui::{
     widgets::{Block, Paragraph, Gauge},
 };
 use std::io;
-use std::time::{Duration, Instant};
 
 const BROWN: Color = Color::Rgb(142, 73, 26);
 
@@ -31,11 +30,10 @@ macro_rules! app_println {
     };
 }
 
-fn time_to_color(temps_restant: u32, temps_initial: u32) -> Color {
-    let ratio = temps_restant as f32 / temps_initial as f32;
-    if ratio > 0.5 {
+fn time_to_color(percent: f32) -> Color {
+    if percent > 0.5 {
         Color::Green
-    } else if ratio > 0.2 {
+    } else if percent > 0.2 {
         Color::Yellow
     } else {
         Color::Red
@@ -65,7 +63,7 @@ impl Default for App {
         Self {
             right_panel_content: "".to_string(),
             should_quit: false,
-            game: Game::new(300),
+            game: Game::new(),
             logs: vec![
                 "Application démarrée".to_string(),
                 "Carte générée".to_string(),
@@ -120,25 +118,21 @@ impl App {
             if self.should_quit {
                 return Ok(());
             }
-            sleep(Duration::from_millis(200));
         }
     }
 
     fn draw(&self, frame: &mut Frame) {
         use Constraint::{Length, Min, Percentage};
 
-        let player_pos = self.game.get_player().get_pos();
+        let player = self.game.get_player();
         let right_panel_content = format!(
-            "Coords perso: x={}, y={}\n\nLégende:\n🧑‍🍳 Joueur\n🪑 Table\n🔪 Station de coupe\n🍽️ Assiette\n🍞 Pain\n🥬 Salade\n🍅 Tomate\n🧅 Oignon\n\nUtilisez les flèches pour vous déplacer!\nItem actuellement tenu: {}\nPosition actuelle: ({}, {})\nRegarde vers: {:?}",
-            player_pos.0,
-            player_pos.1,
+            "Légende:\n🧑‍🍳 Joueur\n🪑 Table\n🔪 Station de coupe\n🍽️ Assiette\n🍞 Pain\n🥬 Salade\n🍅 Tomate\n🧅 Oignon\n\nUtilisez les flèches pour vous déplacer!\nItem en main: {}\nPosition: {:?}\nDirection : {}",
             self.game
                 .get_player()
                 .get_object_held()
                 .map_or("Rien".to_string(), |ingr| ingr.emoji().to_string()),
-            player_pos.0,
-            player_pos.1,
-            self.game.get_player().get_facing(),
+            player.get_pos(),
+            player.get_facing().emoji(),
         );
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
@@ -177,10 +171,7 @@ impl App {
             let recipe_box =
                 Block::bordered()
                     .title(format!("Recette {}", i + 1))
-                    .style(Style::default().bg(time_to_color(
-                        recette.get_temps_restant(),
-                        recette.get_temps_initial(),
-                    )));
+                    .style(Style::default().bg(time_to_color(recette.get_percent_left())));
 
             let area = Rect {
                 x: padded_recipe_list.x,
@@ -204,10 +195,9 @@ impl App {
             frame.render_widget(recipe_paragraph, para_area_padded);
 
             let gauge_area_padded = gauge_area.inner(Margin { vertical: 0, horizontal: 1 });
-            let percent = (recette.get_temps_restant() * 100 / recette.get_temps_initial()).min(100);
             let gauge = Gauge::default()
-                .percent(percent as u16)
-                .label(format!("{}s", recette.get_temps_restant()))
+                .percent((recette.get_percent_left() * 100.) as u16)
+                .label(format!("{:.2}s", recette.get_temps_restant().as_secs_f32()))
                 .style(Style::default().fg(Color::Green).bg(Color::Black));
             frame.render_widget(gauge, gauge_area_padded);
         }
@@ -237,7 +227,6 @@ impl App {
         let cell_width = inner_area.width / map_width;
         let cell_height = inner_area.height / map_height;
 
-        let player = self.game.get_player();
         for (y, row) in self.game.get_map().iter().enumerate() {
             for (x, cell) in row.iter().enumerate() {
                 let cell_area = Rect {
@@ -247,7 +236,7 @@ impl App {
                     height: cell_height,
                 };
 
-                let (style, letter) = if (x, y) == player_pos {
+                let (style, letter) = if (x, y) == player.get_pos() {
                     (Style::default().bg(Color::Green).fg(Color::Black), "🧑‍🍳")
                 } else {
                     match cell {
@@ -327,40 +316,26 @@ impl App {
                 KeyCode::Char(' ') => {
                     let result = self.game.pickup();
                     match result {
-                        ActionResult::Success => {
-                            app_println!(self, "Objet ramassé avec succès");
-                        }
-                        ActionResult::HandsFull => {
-                            app_println!(self, "Mains pleines ! Impossible de ramasser");
-                        }
-                        ActionResult::NoTarget => {
-                            app_println!(self, "Rien à ramasser à {:?}", self.game.get_facing());
-                        }
-                        _ => {}
+                        Ok(()) => app_println!(self, "Objet ramassé avec succès"),
+                        Err(PickupError::HandsFull) => app_println!(self, "Mains pleines ! Impossible de ramasser"),
+                        Err(PickupError::AssietteEmpty) => app_println!(self, "Assiette vide ! Rien à ramasser"),
+                        Err(PickupError::TableEmpty) => app_println!(self, "Table vide ! Rien à ramasser"),
+                        Err(PickupError::NoTarget((pos, _))) => app_println!(self, "Impossible de ramasser à {:?}", pos),
                     }
                 }
                 KeyCode::Char('e') => {
                     let result = self.game.deposit();
                     match result {
-                        ActionResult::Success => {
-                            app_println!(self, "Objet déposé avec succès");
-                        }
-                        ActionResult::HandsEmpty => {
-                            app_println!(self, "Mains vides ! Rien à déposer");
-                        }
-                        ActionResult::TableOccupied => {
-                            app_println!(self, "Table occupée ! Impossible de déposer");
-                        }
-                        ActionResult::NoTarget => {
-                            app_println!(self, "Impossible de déposer ici");
-                        }
-                        _ => {}
+                        Ok(()) => app_println!(self, "Objet déposé avec succès"),
+                        Err(DepositError::HandsEmpty) => app_println!(self, "Mains vides ! Rien à déposer"),
+                        Err(DepositError::TableFull) => app_println!(self, "Table occupée ! Impossible de déposer"),
+                        Err(DepositError::NoTarget((pos, _))) => app_println!(self, "Impossible de déposer à {:?}", pos),
                     }
                 }
-                KeyCode::Char('r') => {
-                    self.game.ajouter_recette_random();
-                    app_println!(self, "Nouvelle recette ajoutée !");
-                }
+                // KeyCode::Char('r') => {
+                //     self.game.ajouter_recette_random();
+                //     app_println!(self, "Nouvelle recette ajoutée !");
+                // }
                 _ => {}
             },
             _ => {}
