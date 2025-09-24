@@ -1,6 +1,7 @@
 use crate::game::Game;
 use crate::objets::{ActionResult, Case, Direction};
 use color_eyre::Result;
+use std::{thread::sleep, time::Duration};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
 use ratatui::prelude::Backend;
@@ -119,6 +120,7 @@ impl App {
             if self.should_quit {
                 return Ok(());
             }
+            sleep(Duration::from_millis(200));
         }
     }
 
@@ -235,6 +237,7 @@ impl App {
         let cell_width = inner_area.width / map_width;
         let cell_height = inner_area.height / map_height;
 
+        let player = self.game.get_player();
         for (y, row) in self.game.get_map().iter().enumerate() {
             for (x, cell) in row.iter().enumerate() {
                 let cell_area = Rect {
@@ -263,7 +266,7 @@ impl App {
                         _ => (Style::default().bg(Color::White).fg(Color::White), " "),
                     }
                 };
-
+              
                 let cell_block = Block::default().style(style);
                 frame.render_widget(cell_block, cell_area);
 

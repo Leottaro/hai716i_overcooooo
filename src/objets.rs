@@ -5,8 +5,7 @@ use rand::{Rng, seq::IndexedRandom};
 
 use crate::DEADLINE_RANGE;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
     North,
     West,
@@ -14,7 +13,7 @@ pub enum Direction {
     East,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum IngredientType {
     Pain,
     Salade,
@@ -22,16 +21,53 @@ pub enum IngredientType {
     Oignon,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+impl IngredientType {
+    pub fn char(&self) -> char {
+        match self {
+            IngredientType::Pain => 'p',
+            IngredientType::Salade => 's',
+            IngredientType::Tomate => 't',
+            IngredientType::Oignon => 'o',
+        }
+    }
+
+    pub fn upper_char(&self) -> char {
+        self.char().to_uppercase().next().unwrap()
+    }
+}
+
+impl Display for IngredientType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            IngredientType::Pain => "Pain",
+            IngredientType::Salade => "Salade",
+            IngredientType::Tomate => "Tomate",
+            IngredientType::Oignon => "Oignon",
+        };
+        write!(f, "{str}")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum IngredientEtat {
     Normal,
     Coupe,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+impl Display for IngredientEtat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            IngredientEtat::Normal => "Normal",
+            IngredientEtat::Coupe => "Coupé",
+        };
+        write!(f, "{str}")
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct Ingredient {
-    type_ingredient: IngredientType,
-    etat: IngredientEtat,
+    pub type_ingredient: IngredientType,
+    pub etat: IngredientEtat,
 }
 
 impl Ingredient {
@@ -75,7 +111,7 @@ impl Ingredient {
 
 impl Display for Ingredient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(self, f)
+        write!(f, "{} {}", self.type_ingredient, self.etat)
     }
 }
 
@@ -173,15 +209,30 @@ impl Default for Recette {
     }
 }
 
-/* impl Display for Recette {
+impl Display for Recette {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ingredients = self
-            .ingredients
-            .iter()
-            .map(Ingredient::to_string)
-            .fold(String::new(), |i1, i2| format!("{i1},{i2}"));
-        let temps = self.temps_restant;
-        write!(f, "{temps}:{ingredients}")
+        let ingredients = self.ingredients
+                    .iter()
+                    .map(Ingredient::to_string)
+                    .collect::<Vec<_>>().join(", ");
+        let temps = self.deadline;
+        write!(f, "{temps}t, [{ingredients}]")
     }
 }
- */
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Case {
+    Vide,
+    Table(Option<Ingredient>),
+    Ingredient(IngredientType),
+    COUPER,
+    ASSIETTE,
+}
+
+#[derive(Debug)]
+pub enum RobotAction {
+    Deplacer(Direction),
+    Pickup,
+    Deposit,
+    None,
+}

@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use crate::objets::{Direction, Ingredient};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -39,20 +37,20 @@ impl Player {
         self.object_held
     }
 
-    pub fn set_object_held(&mut self, object: Option<Ingredient>) -> Option<Ingredient> {
-        self.object_held = object;
-        object
+    pub fn take_object_held(&mut self) -> Option<Ingredient> {
+        self.object_held.take()
     }
-}
 
-impl Display for Player {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let c: char = match self.get_facing() {
+    pub fn set_object_held(&mut self, object: Option<Ingredient>){
+        self.object_held = object
+    }
+  
+    pub fn char(&self) -> char {
+        match self.get_facing() {
             Direction::North => '↑',
             Direction::West => '←',
             Direction::South => '↓',
             Direction::East => '→',
-        };
-        write!(f, "{c}")
+        }
     }
 }
