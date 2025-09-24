@@ -1,8 +1,5 @@
 use crate::{
-    objets::{
-        Case, DepositError, Direction, Ingredient, IngredientType, PickupError, Recette,
-        RobotAction,
-    },
+    objets::{Case, Direction, Ingredient, IngredientType, Recette},
     player::Player,
 };
 use std::{
@@ -13,7 +10,30 @@ use std::{
 };
 
 pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(25)..=Duration::from_secs(50);
+    Duration::from_secs(5)..=Duration::from_secs(10);
+
+#[derive(Debug, PartialEq)]
+pub enum PickupError {
+    HandsFull,
+    AssietteEmpty,
+    TableEmpty,
+    NoTarget(((usize, usize), Case)),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum DepositError {
+    HandsEmpty,
+    TableFull,
+    NoTarget(((usize, usize), Case)),
+}
+
+#[derive(Debug)]
+pub enum RobotAction {
+    Deplacer(Direction),
+    Pickup,
+    Deposit,
+    None,
+}
 
 #[derive(Debug, PartialEq)]
 pub struct Game {
@@ -235,6 +255,10 @@ impl Game {
         self.map[0].len()
     }
 
+    pub fn get_score(&self) -> i32 {
+        self.score
+    }
+
     pub fn get_facing(&self, pos: (usize, usize)) -> ((usize, usize), Case) {
         let mut facing_pos: (usize, usize) = pos;
         let lenx: usize = self.map[0].len();
@@ -269,6 +293,12 @@ impl Game {
             neighbours.push((x, y + 1));
         }
         neighbours
+    }
+
+    pub fn add_random_recette(&mut self) {
+        self.recettes.push(Recette::new());
+        self.recettes
+            .sort_by(|r1, r2| r1.get_expiration().cmp(r2.get_expiration()));
     }
 
     pub fn move_player(&mut self, direction: Direction) {
@@ -359,7 +389,7 @@ impl Game {
     }
 
     fn determine_action(&self) -> RobotAction {
-        let next_recette = match self.recettes.last() {
+        let next_recette = match self.recettes.first() {
             None => return RobotAction::None,
             Some(recette) => recette,
         };

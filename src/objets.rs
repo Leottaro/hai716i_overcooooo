@@ -23,7 +23,7 @@ impl Direction {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum IngredientType {
     Pain,
     Salade,
@@ -52,6 +52,15 @@ impl IngredientType {
             IngredientType::Tomate => "🍅",
             IngredientType::Oignon => "🧅",
         }
+    }
+
+    pub fn iter() -> Vec<Self> {
+        vec![
+            IngredientType::Pain,
+            IngredientType::Salade,
+            IngredientType::Tomate,
+            IngredientType::Oignon,
+        ]
     }
 }
 
@@ -113,6 +122,11 @@ impl Ingredient {
     pub fn couper(&mut self) {
         self.etat = IngredientEtat::Coupe;
     }
+
+    pub fn into_coupe(mut self) -> Self {
+        self.couper();
+        self
+    }
 }
 
 impl Display for Ingredient {
@@ -144,11 +158,11 @@ pub struct Recette {
 impl Recette {
     pub fn new() -> Self {
         let mut rng = rand::rng();
-        let mut ingredients = vec![Ingredient::new(IngredientType::Pain)];
+        let mut ingredients = vec![Ingredient::new(IngredientType::Pain).into_coupe()];
         let possibles = [
-            Ingredient::new(IngredientType::Salade),
-            Ingredient::new(IngredientType::Tomate),
-            Ingredient::new(IngredientType::Oignon),
+            Ingredient::new(IngredientType::Salade).into_coupe(),
+            Ingredient::new(IngredientType::Tomate).into_coupe(),
+            Ingredient::new(IngredientType::Oignon).into_coupe(),
         ];
 
         if let Some(&choice) = possibles.choose(&mut rng) {
@@ -171,12 +185,20 @@ impl Recette {
         &self.ingredients
     }
 
-    pub fn is_too_late(&self) -> bool {
-        self.expiration <= Instant::now()
+    pub fn get_creation(&self) -> &Instant {
+        &self.creation
     }
 
-    pub fn get_temps_initial(&self) -> &Duration {
+    pub fn get_duree(&self) -> &Duration {
         &self.duree
+    }
+
+    pub fn get_expiration(&self) -> &Instant {
+        &self.expiration
+    }
+
+    pub fn is_too_late(&self) -> bool {
+        self.expiration <= Instant::now()
     }
 
     pub fn get_temps_restant(&self) -> Duration {
@@ -199,27 +221,4 @@ impl Display for Recette {
         let temps = self.get_temps_restant().as_secs_f32();
         write!(f, "{temps:.2}s, [{ingredients}]")
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum PickupError {
-    HandsFull,
-    AssietteEmpty,
-    TableEmpty,
-    NoTarget(((usize, usize), Case)),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum DepositError {
-    HandsEmpty,
-    TableFull,
-    NoTarget(((usize, usize), Case)),
-}
-
-#[derive(Debug)]
-pub enum RobotAction {
-    Deplacer(Direction),
-    Pickup,
-    Deposit,
-    None,
 }

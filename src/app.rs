@@ -1,5 +1,5 @@
-use crate::game::Game;
-use crate::objets::{Case, DepositError, Direction, PickupError};
+use crate::game::{DepositError, Game, PickupError};
+use crate::objets::{Case, Direction};
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
@@ -14,6 +14,7 @@ use std::io;
 use std::time::{Duration, Instant};
 
 const BROWN: Color = Color::Rgb(142, 73, 26);
+pub const ROBOT_COOLDOWN: Duration = Duration::from_millis(100);
 
 // Macros pour rediriger les prints vers le système de log
 #[macro_export]
@@ -88,32 +89,28 @@ impl App {
         self.log(message.to_string());
     }
 
-    pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
-        let tick_rate = Duration::from_millis(250);
-        let mut last_tick = Instant::now();
+    pub fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>, robot: bool) -> io::Result<()> {
+        let mut next_robot = Instant::now();
 
         loop {
             // Render UI
             terminal.draw(|frame| self.draw(frame))?;
 
-            // Gérer le timing
-            let timeout = tick_rate
-                .checked_sub(last_tick.elapsed())
-                .unwrap_or_else(|| Duration::from_secs(0));
-
             // Gérer les événements avec timeout
-            if event::poll(timeout)? {
-                let return_handle = self.handle_events();
+            if event::poll(Duration::from_millis(16))? {
+                let return_handle = self.handle_events(robot);
                 if let Err(e) = return_handle {
                     self.log_fmt(&format!("Erreur event: {}", e));
                 }
             }
 
             // Vérifier si c'est le moment de faire un tick
-            if last_tick.elapsed() >= tick_rate {
-                self.game.tick();
-                last_tick = Instant::now();
+            let now = Instant::now();
+            if robot && next_robot < now {
+                self.game.robot();
+                next_robot = now + ROBOT_COOLDOWN;
             }
+            self.game.tick();
 
             if self.should_quit {
                 return Ok(());
@@ -126,13 +123,20 @@ impl App {
 
         let player = self.game.get_player();
         let right_panel_content = format!(
-            "Légende:\n🧑‍🍳 Joueur\n🪑 Table\n🔪 Station de coupe\n🍽️ Assiette\n🍞 Pain\n🥬 Salade\n🍅 Tomate\n🧅 Oignon\n\nUtilisez les flèches pour vous déplacer!\nItem en main: {}\nPosition: {:?}\nDirection : {}",
+            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} \nDirection : {} \nAssiette: {} \nScore: {}",
             self.game
                 .get_player()
                 .get_object_held()
                 .map_or("Rien".to_string(), |ingr| ingr.emoji().to_string()),
             player.get_pos(),
             player.get_facing().emoji(),
+            self.game
+                .get_assiette()
+                .iter()
+                .map(|ingr| ingr.emoji())
+                .collect::<Vec<_>>()
+                .join(", "),
+            self.game.get_score()
         );
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
@@ -253,7 +257,9 @@ impl App {
                         Case::COUPER => {
                             (Style::default().bg(Color::LightBlue).fg(Color::Black), "🔪")
                         }
-                        Case::ASSIETTE => (Style::default().bg(BROWN).fg(Color::White), "🍽️"),
+                        Case::ASSIETTE => {
+                            (Style::default().bg(Color::DarkGray).fg(Color::White), "🍽️")
+                        }
                         _ => (Style::default().bg(Color::White).fg(Color::White), " "),
                     }
                 };
@@ -296,64 +302,77 @@ impl App {
         frame.render_widget(log_paragraph, right_log_area);
     }
 
-    fn handle_events(&mut self) -> Result<()> {
-        match event::read()? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => match key.code {
-                KeyCode::Esc => {
-                    self.log_fmt("Quitter le jeu");
-                    self.should_quit = true;
-                }
-                KeyCode::Up | KeyCode::Char('z') => {
-                    self.game.move_player(Direction::North);
-                }
-                KeyCode::Down | KeyCode::Char('s') => {
-                    self.game.move_player(Direction::South);
-                }
-                KeyCode::Left | KeyCode::Char('q') => {
-                    self.game.move_player(Direction::West);
-                }
-                KeyCode::Right | KeyCode::Char('d') => {
-                    self.game.move_player(Direction::East);
-                }
-                KeyCode::Char(' ') => {
-                    let result = self.game.pickup();
-                    match result {
-                        Ok(()) => app_println!(self, "Objet ramassé avec succès"),
-                        Err(PickupError::HandsFull) => {
-                            app_println!(self, "Mains pleines ! Impossible de ramasser")
-                        }
-                        Err(PickupError::AssietteEmpty) => {
-                            app_println!(self, "Assiette vide ! Rien à ramasser")
-                        }
-                        Err(PickupError::TableEmpty) => {
-                            app_println!(self, "Table vide ! Rien à ramasser")
-                        }
-                        Err(PickupError::NoTarget((pos, _))) => {
-                            app_println!(self, "Impossible de ramasser à {:?}", pos)
-                        }
+    fn handle_events(&mut self, robot: bool) -> Result<()> {
+        let key_event = match event::read()? {
+            Event::Key(key) => key,
+            _ => return Ok(()),
+        };
+
+        if key_event.kind != KeyEventKind::Press {
+            return Ok(());
+        }
+
+        let key_code = key_event.code;
+        if key_code == KeyCode::Esc {
+            self.log_fmt("Quitter le jeu");
+            self.should_quit = true;
+            return Ok(());
+        }
+
+        if robot {
+            return Ok(());
+        }
+
+        match key_code {
+            KeyCode::Up | KeyCode::Char('z') => {
+                self.game.move_player(Direction::North);
+            }
+            KeyCode::Down | KeyCode::Char('s') => {
+                self.game.move_player(Direction::South);
+            }
+            KeyCode::Left | KeyCode::Char('q') => {
+                self.game.move_player(Direction::West);
+            }
+            KeyCode::Right | KeyCode::Char('d') => {
+                self.game.move_player(Direction::East);
+            }
+            KeyCode::Char(' ') => {
+                let result = self.game.pickup();
+                match result {
+                    Ok(()) => app_println!(self, "Objet ramassé avec succès"),
+                    Err(PickupError::HandsFull) => {
+                        app_println!(self, "Mains pleines ! Impossible de ramasser")
+                    }
+                    Err(PickupError::AssietteEmpty) => {
+                        app_println!(self, "Assiette vide ! Rien à ramasser")
+                    }
+                    Err(PickupError::TableEmpty) => {
+                        app_println!(self, "Table vide ! Rien à ramasser")
+                    }
+                    Err(PickupError::NoTarget((pos, _))) => {
+                        app_println!(self, "Impossible de ramasser à {:?}", pos)
                     }
                 }
-                KeyCode::Char('e') => {
-                    let result = self.game.deposit();
-                    match result {
-                        Ok(()) => app_println!(self, "Objet déposé avec succès"),
-                        Err(DepositError::HandsEmpty) => {
-                            app_println!(self, "Mains vides ! Rien à déposer")
-                        }
-                        Err(DepositError::TableFull) => {
-                            app_println!(self, "Table occupée ! Impossible de déposer")
-                        }
-                        Err(DepositError::NoTarget((pos, _))) => {
-                            app_println!(self, "Impossible de déposer à {:?}", pos)
-                        }
+            }
+            KeyCode::Char('e') => {
+                let result = self.game.deposit();
+                match result {
+                    Ok(()) => app_println!(self, "Objet déposé avec succès"),
+                    Err(DepositError::HandsEmpty) => {
+                        app_println!(self, "Mains vides ! Rien à déposer")
+                    }
+                    Err(DepositError::TableFull) => {
+                        app_println!(self, "Table occupée ! Impossible de déposer")
+                    }
+                    Err(DepositError::NoTarget((pos, _))) => {
+                        app_println!(self, "Impossible de déposer à {:?}", pos)
                     }
                 }
-                // KeyCode::Char('r') => {
-                //     self.game.ajouter_recette_random();
-                //     app_println!(self, "Nouvelle recette ajoutée !");
-                // }
-                _ => {}
-            },
+            }
+            KeyCode::Char('r') => {
+                self.game.add_random_recette();
+                app_println!(self, "Nouvelle recette ajoutée !");
+            }
             _ => {}
         }
         Ok(())

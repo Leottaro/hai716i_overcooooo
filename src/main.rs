@@ -5,7 +5,7 @@ fn main() -> Result<()> {
     color_eyre::install()?;
     let mut terminal = ratatui::init();
     let mut app = App::new();
-    let result = app.run(&mut terminal);
+    let result = app.run(&mut terminal, true);
     ratatui::restore();
     Ok(result?)
 }
