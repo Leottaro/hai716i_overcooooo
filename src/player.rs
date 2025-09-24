@@ -41,7 +41,7 @@ impl Player {
         self.object_held.take()
     }
 
-    pub fn set_object_held(&mut self, object: Option<Ingredient>){
+    pub fn set_object_held(&mut self, object: Option<Ingredient>) {
         self.object_held = object
     }
 }

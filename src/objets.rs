@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
-use std::{fmt::Display, time::Duration};
 use std::time::Instant;
+use std::{fmt::Display, time::Duration};
 
 use rand::{Rng, seq::IndexedRandom};
 
@@ -130,7 +130,8 @@ pub enum Case {
     ASSIETTE,
 }
 
-pub const RECETTE_DEADLINE_RANGE: RangeInclusive<Duration> = Duration::from_secs(30)..=Duration::from_secs(40);
+pub const RECETTE_DEADLINE_RANGE: RangeInclusive<Duration> =
+    Duration::from_secs(30)..=Duration::from_secs(40);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
@@ -165,7 +166,7 @@ impl Recette {
             expiration,
         }
     }
-    
+
     pub fn get_ingredients(&self) -> &Vec<Ingredient> {
         &self.ingredients
     }

@@ -1,17 +1,17 @@
 use crate::game::Game;
 use crate::objets::{Case, DepositError, Direction, PickupError};
 use color_eyre::Result;
-use std::{time::{Duration, Instant}};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
 use ratatui::prelude::Backend;
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect, Margin},
+    layout::{Constraint, Layout, Margin, Rect},
     style::{Color, Style},
-    widgets::{Block, Paragraph, Gauge},
+    widgets::{Block, Gauge, Paragraph},
 };
 use std::io;
+use std::time::{Duration, Instant};
 
 const BROWN: Color = Color::Rgb(142, 73, 26);
 
@@ -142,7 +142,6 @@ impl App {
 
         let right_vertical = Layout::vertical([Min(17), Percentage(80), Percentage(20)]);
         let [right_info_area, right_recipe_list, right_log_area] = right_vertical.areas(right_area);
-        
 
         // Afficher les recettes dans le panneau des recettes
         frame.render_widget(
@@ -153,10 +152,12 @@ impl App {
         );
         let recettes = self.game.get_recettes();
         let recette_height = 5;
-        let padded_recipe_list = right_recipe_list.inner(Margin { vertical: 1, horizontal: 1 });
+        let padded_recipe_list = right_recipe_list.inner(Margin {
+            vertical: 1,
+            horizontal: 1,
+        });
         frame.render_widget(
-            Block::default()
-                .style(Style::default().bg(Color::Blue)),
+            Block::default().style(Style::default().bg(Color::Blue)),
             padded_recipe_list,
         );
         let max_recettes = padded_recipe_list.height as usize / recette_height;
@@ -168,10 +169,9 @@ impl App {
                 .collect::<Vec<&str>>()
                 .join(", ");
 
-            let recipe_box =
-                Block::bordered()
-                    .title(format!("Recette {}", i + 1))
-                    .style(Style::default().bg(time_to_color(recette.get_percent_left())));
+            let recipe_box = Block::bordered()
+                .title(format!("Recette {}", i + 1))
+                .style(Style::default().bg(time_to_color(recette.get_percent_left())));
 
             let area = Rect {
                 x: padded_recipe_list.x,
@@ -182,19 +182,21 @@ impl App {
 
             frame.render_widget(recipe_box, area);
 
-            let [para_area, gauge_area] = Layout::vertical([
-                Length(recette_height as u16 - 1),
-                Length(1),
-            ]).areas(area);
+            let [para_area, gauge_area] =
+                Layout::vertical([Length(recette_height as u16 - 1), Length(1)]).areas(area);
 
-            let para_area_padded = para_area.inner(Margin { vertical: 1, horizontal: 1 });
-            let recipe_paragraph = Paragraph::new(format!(
-                "Ingrédients : {}\nTemps restant :",
-                ingredients,
-            ));
+            let para_area_padded = para_area.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            });
+            let recipe_paragraph =
+                Paragraph::new(format!("Ingrédients : {}\nTemps restant :", ingredients,));
             frame.render_widget(recipe_paragraph, para_area_padded);
 
-            let gauge_area_padded = gauge_area.inner(Margin { vertical: 0, horizontal: 1 });
+            let gauge_area_padded = gauge_area.inner(Margin {
+                vertical: 0,
+                horizontal: 1,
+            });
             let gauge = Gauge::default()
                 .percent((recette.get_percent_left() * 100.) as u16)
                 .label(format!("{:.2}s", recette.get_temps_restant().as_secs_f32()))
@@ -255,7 +257,7 @@ impl App {
                         _ => (Style::default().bg(Color::White).fg(Color::White), " "),
                     }
                 };
-              
+
                 let cell_block = Block::default().style(style);
                 frame.render_widget(cell_block, cell_area);
 
@@ -317,19 +319,33 @@ impl App {
                     let result = self.game.pickup();
                     match result {
                         Ok(()) => app_println!(self, "Objet ramassé avec succès"),
-                        Err(PickupError::HandsFull) => app_println!(self, "Mains pleines ! Impossible de ramasser"),
-                        Err(PickupError::AssietteEmpty) => app_println!(self, "Assiette vide ! Rien à ramasser"),
-                        Err(PickupError::TableEmpty) => app_println!(self, "Table vide ! Rien à ramasser"),
-                        Err(PickupError::NoTarget((pos, _))) => app_println!(self, "Impossible de ramasser à {:?}", pos),
+                        Err(PickupError::HandsFull) => {
+                            app_println!(self, "Mains pleines ! Impossible de ramasser")
+                        }
+                        Err(PickupError::AssietteEmpty) => {
+                            app_println!(self, "Assiette vide ! Rien à ramasser")
+                        }
+                        Err(PickupError::TableEmpty) => {
+                            app_println!(self, "Table vide ! Rien à ramasser")
+                        }
+                        Err(PickupError::NoTarget((pos, _))) => {
+                            app_println!(self, "Impossible de ramasser à {:?}", pos)
+                        }
                     }
                 }
                 KeyCode::Char('e') => {
                     let result = self.game.deposit();
                     match result {
                         Ok(()) => app_println!(self, "Objet déposé avec succès"),
-                        Err(DepositError::HandsEmpty) => app_println!(self, "Mains vides ! Rien à déposer"),
-                        Err(DepositError::TableFull) => app_println!(self, "Table occupée ! Impossible de déposer"),
-                        Err(DepositError::NoTarget((pos, _))) => app_println!(self, "Impossible de déposer à {:?}", pos),
+                        Err(DepositError::HandsEmpty) => {
+                            app_println!(self, "Mains vides ! Rien à déposer")
+                        }
+                        Err(DepositError::TableFull) => {
+                            app_println!(self, "Table occupée ! Impossible de déposer")
+                        }
+                        Err(DepositError::NoTarget((pos, _))) => {
+                            app_println!(self, "Impossible de déposer à {:?}", pos)
+                        }
                     }
                 }
                 // KeyCode::Char('r') => {
