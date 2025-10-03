@@ -123,7 +123,7 @@ impl App {
 
         let player = self.game.get_player();
         let right_panel_content = format!(
-            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} \nDirection : {} \nAssiette: {} \nScore: {}",
+            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} \nDirection : {} \nAssiette: {} \nScore: {}\nVies: {}",
             self.game
                 .get_player()
                 .get_object_held()
@@ -136,7 +136,8 @@ impl App {
                 .map(|ingr| ingr.emoji())
                 .collect::<Vec<_>>()
                 .join(", "),
-            self.game.get_score()
+            self.game.get_score(),
+            self.game.get_vies(),
         );
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
