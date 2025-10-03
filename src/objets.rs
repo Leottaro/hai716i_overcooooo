@@ -167,7 +167,7 @@ impl Recette {
         ];
         let n = rng.random_range(1..= possibles.len());
         possibles.shuffle(&mut rng);
-        for choice in possibles.into_iter().take(n - 1) {
+        for choice in possibles.into_iter().take(n) {
             ingredients.push(choice);
         }
 
