@@ -12,7 +12,7 @@ use std::{
 const MAX_VIES: i32 = 100;
 
 pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(5)..=Duration::from_secs(10);
+    Duration::from_secs(10)..=Duration::from_secs(15);
 
 #[derive(Debug, PartialEq)]
 pub enum PickupError {
@@ -227,7 +227,7 @@ impl Game {
         Self {
             player: Player::new((1, 1)),
             map,
-            recettes: vec![Recette::new(), Recette::new()],
+            recettes: vec![Recette::new()],
             assiette: Vec::new(),
             score: 0,
             vie: MAX_VIES,
@@ -397,7 +397,7 @@ impl Game {
         self.recettes.retain(|recette| !recette.is_too_late());
         if self.next_recette <= Instant::now() {
             self.recettes.push(Recette::new());
-            self.next_recette = Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE);
+            self.next_recette = Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE) - Duration::from_secs((self.score as u64)/10);
         }
     }
 
