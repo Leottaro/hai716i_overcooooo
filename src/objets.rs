@@ -2,7 +2,8 @@ use std::ops::RangeInclusive;
 use std::time::Instant;
 use std::{fmt::Display, time::Duration};
 
-use rand::{Rng, seq::IndexedRandom};
+use rand::{Rng};
+use rand::seq::SliceRandom;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
@@ -159,13 +160,14 @@ impl Recette {
     pub fn new() -> Self {
         let mut rng = rand::rng();
         let mut ingredients = vec![Ingredient::new(IngredientType::Pain).into_coupe()];
-        let possibles = [
+        let mut possibles = [
             Ingredient::new(IngredientType::Salade).into_coupe(),
             Ingredient::new(IngredientType::Tomate).into_coupe(),
             Ingredient::new(IngredientType::Oignon).into_coupe(),
         ];
-
-        if let Some(&choice) = possibles.choose(&mut rng) {
+        let n = rng.random_range(1..= possibles.len());
+        possibles.shuffle(&mut rng);
+        for choice in possibles.into_iter().take(n - 1) {
             ingredients.push(choice);
         }
 
