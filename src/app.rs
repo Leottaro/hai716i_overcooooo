@@ -140,8 +140,15 @@ impl App {
             self.game.get_vies(),
         );
 
-        let vertical = Layout::vertical([Length(1), Min(0), Length(1)]);
+        let vertical = Layout::vertical([Length(1), Min(0), Length(5)]);
         let [title_area, main_area, status_area] = vertical.areas(frame.area());
+
+        let gauge = Gauge::default()
+            .percent(self.game.get_vies() as u16)
+            .label(format!("Vie restante: {}%", self.game.get_vies()))
+            .style(Style::default().fg(Color::White).bg(Color::Black))
+            .gauge_style(Style::default().bg(Color::Black).fg(time_to_color(self.game.get_vies() as f32)));
+        frame.render_widget(gauge, status_area);
         let horizontal = Layout::horizontal([Percentage(67), Percentage(33)]);
         let [left_area, right_area] = horizontal.areas(main_area);
 
@@ -188,7 +195,7 @@ impl App {
             frame.render_widget(recipe_box, area);
 
             let [para_area, gauge_area] =
-                Layout::vertical([Length(recette_height as u16 - 1), Length(1)]).areas(area);
+                Layout::vertical([Min(1), Length(1)]).areas(area);
 
             let para_area_padded = para_area.inner(Margin {
                 vertical: 1,
@@ -205,7 +212,8 @@ impl App {
             let gauge = Gauge::default()
                 .percent((recette.get_percent_left() * 100.) as u16)
                 .label(format!("{:.2}s", recette.get_temps_restant().as_secs_f32()))
-                .style(Style::default().fg(Color::Green).bg(Color::Black));
+                .style(Style::default().fg(Color::White).bg(Color::Black))
+                .gauge_style(Style::default().fg(Color::White).bg(time_to_color(recette.get_percent_left())));
             frame.render_widget(gauge, gauge_area_padded);
         }
         frame.render_widget(Block::bordered().title("Overcook Dark Radé"), title_area);

@@ -3,10 +3,13 @@ use crate::{
     player::Player,
 };
 use std::{
+    cmp::{max_by, min_by},
     collections::HashSet,
     ops::RangeInclusive,
     time::{Duration, Instant},
 };
+
+const MAX_VIES: i32 = 100;
 
 pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
     Duration::from_secs(5)..=Duration::from_secs(10);
@@ -227,7 +230,7 @@ impl Game {
             recettes: vec![Recette::new(), Recette::new()],
             assiette: Vec::new(),
             score: 0,
-            vie: 100,
+            vie: MAX_VIES,
             next_recette: Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE),
         }
     }
@@ -356,8 +359,12 @@ impl Game {
                     .position(|recette| self.assiette.eq(recette.get_ingredients()));
                 if let Some(i) = recette_correspondante {
                     self.score += self.assiette.len() as i32;
-                    self.vie += (self.assiette.len() as i32) * 5;
-                    self.assiette = vec![];
+                    self.vie = min_by(
+                        self.vie + (self.assiette.len() as i32) * 5,
+                        MAX_VIES,
+                        |a, b| a.cmp(b),
+                    );
+                    self.assiette.clear();
                     self.recettes.remove(i);
                 }
             }
@@ -380,7 +387,11 @@ impl Game {
         let mut recettes_unfinished = self.recettes.clone();
         recettes_unfinished.retain(|recette| recette.is_too_late());
         for recette in recettes_unfinished {
-            self.vie -= (recette.get_ingredients().len() as i32) * 10;
+            self.vie = max_by(
+                self.vie - (recette.get_ingredients().len() as i32) * 10,
+                0,
+                |a, b| a.cmp(b),
+            );
             self.assiette.clear();
         }
         self.recettes.retain(|recette| !recette.is_too_late());
@@ -416,9 +427,9 @@ impl Game {
             }
         }
 
-        let next_ingredient = match ingredients_restant.iter().next() {
+        let next_ingredient = match ingredients_restant.first() {
             None => return RobotAction::None,
-            Some(ingr) => ingr.clone(),
+            Some(ingr) => *ingr,
         };
 
         let (x, y) = self.player.get_pos();
@@ -508,9 +519,7 @@ impl Game {
             }
         }
 
-        if found_pos.is_none() {
-            return None;
-        }
+        found_pos?;
         let mut path = vec![found_pos.unwrap()];
 
         loop {
