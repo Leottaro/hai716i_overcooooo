@@ -2,7 +2,7 @@ use std::ops::RangeInclusive;
 use std::time::Instant;
 use std::{fmt::Display, time::Duration};
 
-use rand::{Rng};
+use rand::Rng;
 use rand::seq::SliceRandom;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -165,7 +165,7 @@ impl Recette {
             Ingredient::new(IngredientType::Tomate).into_coupe(),
             Ingredient::new(IngredientType::Oignon).into_coupe(),
         ];
-        let n = rng.random_range(1..= possibles.len());
+        let n = rng.random_range(1..=possibles.len());
         possibles.shuffle(&mut rng);
         for choice in possibles.into_iter().take(n) {
             ingredients.push(choice);

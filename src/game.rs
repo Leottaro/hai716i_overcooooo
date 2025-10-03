@@ -43,6 +43,7 @@ pub struct Game {
     recettes: Vec<Recette>,
 
     score: i32,
+    vie: i32,
     next_recette: Instant,
 }
 
@@ -227,6 +228,7 @@ impl Game {
             recettes: vec![Recette::new(), Recette::new()],
             assiette: Vec::new(),
             score: 0,
+            vie: 100,
             next_recette: Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE),
         }
     }
@@ -351,6 +353,7 @@ impl Game {
                     .position(|recette| self.assiette.eq(recette.get_ingredients()));
                 if let Some(i) = recette_correspondante {
                     self.score += self.assiette.len() as i32;
+                    self.vie += (self.assiette.len() as i32) * 5;
                     self.assiette = vec![];
                     self.recettes.remove(i);
                 }
@@ -371,6 +374,11 @@ impl Game {
     }
 
     pub fn tick(&mut self) {
+        let mut recettes_unfinished = self.recettes.clone();
+        recettes_unfinished.retain(|recette| recette.is_too_late());
+        for recette in recettes_unfinished {
+            self.vie -= (recette.get_ingredients().len() as i32) * 10;
+        }
         self.recettes.retain(|recette| !recette.is_too_late());
         if self.next_recette <= Instant::now() {
             self.recettes.push(Recette::new());
