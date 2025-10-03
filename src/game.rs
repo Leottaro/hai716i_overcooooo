@@ -381,6 +381,7 @@ impl Game {
         recettes_unfinished.retain(|recette| recette.is_too_late());
         for recette in recettes_unfinished {
             self.vie -= (recette.get_ingredients().len() as i32) * 10;
+            self.assiette.clear();
         }
         self.recettes.retain(|recette| !recette.is_too_late());
         if self.next_recette <= Instant::now() {
