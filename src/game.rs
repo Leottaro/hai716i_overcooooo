@@ -411,7 +411,7 @@ impl Game {
         }
     }
 
-    fn determine_action(&self) -> RobotAction {
+    pub fn determine_action(&self) -> RobotAction {
         let next_recette = match self.recettes.first() {
             None => return RobotAction::None,
             Some(recette) => recette,
