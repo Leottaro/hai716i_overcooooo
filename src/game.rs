@@ -393,6 +393,8 @@ impl Game {
                 |a, b| a.cmp(b),
             );
             self.assiette.clear();
+            self.player.set_object_held(None);
+            
         }
         self.recettes.retain(|recette| !recette.is_too_late());
         if self.next_recette <= Instant::now() {
@@ -438,13 +440,15 @@ impl Game {
             Some(ingr) => {
                 if ingr.etat == next_ingredient.etat {
                     Case::ASSIETTE
-                } else {
+                }
+                else {
                     Case::COUPER
                 }
-            }
-        };
+                }
+            };
+        
 
-        // let recipes_str = self.recettes.iter().map(Recette::to_string).collect::<Vec<_>>().join("\n");
+        // let recipes_str = self.recettes.iter().map(Recette::to_string).colect::<Vec<_>>().join("\n");
         // let assiette_str = self.assiette.iter().map(Ingredient::to_string).collect::<Vec<_>>().join(", ");
         // let player_str = format!("{:?}", self.player);
         // let objective_str = format!("{:?}", objective);

@@ -146,7 +146,7 @@ pub enum Case {
 }
 
 pub const RECETTE_DEADLINE_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(30)..=Duration::from_secs(40);
+    Duration::from_secs(15)..=Duration::from_secs(20);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
