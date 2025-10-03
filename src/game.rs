@@ -6,7 +6,6 @@ use std::{
     collections::HashSet,
     ops::RangeInclusive,
     time::{Duration, Instant},
-    usize,
 };
 
 pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
@@ -259,6 +258,10 @@ impl Game {
 
     pub fn get_score(&self) -> i32 {
         self.score
+    }
+
+    pub fn get_vies(&self) -> i32 {
+        self.vie
     }
 
     pub fn get_facing(&self, pos: (usize, usize)) -> ((usize, usize), Case) {
