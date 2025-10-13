@@ -1,9 +1,8 @@
 use crate::{
-    objets::{Case, Direction, Ingredient, IngredientType, Recette},
+    objets::{Case, Direction, Ingredient, IngredientEtat, IngredientType, Recette},
     player::Player,
 };
 use std::{
-    cmp::{max_by, min_by},
     collections::HashSet,
     ops::RangeInclusive,
     time::{Duration, Instant},
@@ -12,7 +11,7 @@ use std::{
 const MAX_VIES: i32 = 100;
 
 pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(10)..=Duration::from_secs(15);
+    Duration::from_secs(2)..=Duration::from_secs(3);
 
 #[derive(Debug, PartialEq)]
 pub enum PickupError {
@@ -353,20 +352,6 @@ impl Game {
         match facing_object {
             Case::ASSIETTE => {
                 self.assiette.push(object_held);
-                let recette_correspondante = self
-                    .recettes
-                    .iter()
-                    .position(|recette| self.assiette.eq(recette.get_ingredients()));
-                if let Some(i) = recette_correspondante {
-                    self.score += self.assiette.len() as i32;
-                    self.vie = min_by(
-                        self.vie + (self.assiette.len() as i32) * 5,
-                        MAX_VIES,
-                        |a, b| a.cmp(b),
-                    );
-                    self.assiette.clear();
-                    self.recettes.remove(i);
-                }
             }
             Case::Table(None) => {
                 self.map[facing_pos.1][facing_pos.0] = Case::Table(Some(object_held));
@@ -383,23 +368,41 @@ impl Game {
         Ok(())
     }
 
-    pub fn tick(&mut self) {
-        let mut recettes_unfinished = self.recettes.clone();
-        recettes_unfinished.retain(|recette| recette.is_too_late());
-        for recette in recettes_unfinished {
-            self.vie = max_by(
-                self.vie - (recette.get_ingredients().len() as i32) * 10,
-                0,
-                |a, b| a.cmp(b),
-            );
+    pub fn tick(&mut self, now: Instant) {
+        let (recettes_too_late, mut new_recettes): (Vec<_>, Vec<_>) = self
+            .recettes
+            .clone()
+            .into_iter()
+            .partition::<Vec<_>, _>(|recette| recette.is_too_late(now));
+
+        let assiette_hashset = self.assiette.clone().into_iter().collect::<HashSet<_>>();
+        let recette_correspondante = self
+            .recettes
+            .iter()
+            .position(|recette| assiette_hashset.eq(recette.get_ingredients()));
+        if let Some(i) = recette_correspondante {
+            let bonus = self.assiette.len() as i32;
+            self.score += bonus;
+            self.vie = if self.vie > MAX_VIES - bonus * 5 {
+                MAX_VIES
+            } else {
+                self.vie + bonus * 5
+            };
             self.assiette.clear();
-            self.player.set_object_held(None);
-            
+            new_recettes.remove(i);
         }
-        self.recettes.retain(|recette| !recette.is_too_late());
-        if self.next_recette <= Instant::now() {
+
+        for recette in &recettes_too_late {
+            let mallus = (recette.get_ingredients().len() as i32) * 10;
+            self.vie -= if self.vie < mallus { self.vie } else { mallus };
+        }
+
+        // update the too lates recettes
+        self.recettes = new_recettes;
+        if self.next_recette <= now {
             self.recettes.push(Recette::new());
-            self.next_recette = Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE) - Duration::from_secs((self.score as u64)/10);
+            self.next_recette = now + rand::random_range(RECETTE_COOLDOWN_RANGE)
+                - Duration::from_secs((self.score as u64) / 10);
         }
     }
 
@@ -413,77 +416,115 @@ impl Game {
         }
     }
 
-    pub fn determine_action(&self) -> RobotAction {
-        let next_recette = match self.recettes.first() {
-            None => return RobotAction::None,
-            Some(recette) => recette,
-        };
+    fn determine_action(&self) -> RobotAction {
+        let objectives = self.determine_objectives();
 
-        let mut ingredients_restant = next_recette.get_ingredients().clone();
-        for ingredient in self.assiette.iter() {
-            if let Some(i) = ingredients_restant
-                .iter()
-                .position(|ingr| ingr.eq(ingredient))
-            {
-                ingredients_restant.remove(i);
+        let (x, y) = self.player.get_pos();
+        for objective in objectives {
+            let chemin = match self.pathfind_case((x, y), objective) {
+                None => continue,
+                Some(chemin) => chemin,
+            };
+
+            let next_pos = match chemin.get(1) {
+                Some(value) => value.clone(),
+                None => continue,
+            };
+
+            let direction = match next_pos {
+                (x1, y1) if (x1, y1) == (x, y - 1) => Direction::North,
+                (x1, y1) if (x1, y1) == (x, y + 1) => Direction::South,
+                (x1, y1) if (x1, y1) == (x - 1, y) => Direction::West,
+                (x1, y1) if (x1, y1) == (x + 1, y) => Direction::East,
+                _ => continue,
+            };
+
+            if chemin.len() != 2 || self.player.get_facing() != direction {
+                return RobotAction::Deplacer(direction);
+            }
+
+            if self.player.get_object_held().is_none() {
+                return RobotAction::Pickup;
+            } else {
+                return RobotAction::Deposit;
             }
         }
 
-        let next_ingredient = match ingredients_restant.first() {
-            None => return RobotAction::None,
-            Some(ingr) => *ingr,
-        };
+        RobotAction::None
+    }
 
-        let (x, y) = self.player.get_pos();
-        let objective = match self.player.get_object_held() {
-            None => Case::Ingredient(next_ingredient.type_ingredient),
-            Some(ingr) => {
-                if ingr.etat == next_ingredient.etat {
-                    Case::ASSIETTE
-                }
-                else {
-                    Case::COUPER
-                }
-                }
-            };
-        
+    fn determine_objectives(&self) -> Vec<Case> {
+        let assiette_hashset = self.assiette.clone().into_iter().collect::<HashSet<_>>();
 
-        // let recipes_str = self.recettes.iter().map(Recette::to_string).colect::<Vec<_>>().join("\n");
-        // let assiette_str = self.assiette.iter().map(Ingredient::to_string).collect::<Vec<_>>().join(", ");
-        // let player_str = format!("{:?}", self.player);
-        // let objective_str = format!("{:?}", objective);
-        // println!("\nASSIETTE: {assiette_str}\nRECIPES: {recipes_str}\nPLAYER: {player_str}\nOBJECTIVE: {objective_str}");
+        let mut diff = usize::MAX;
+        let mut assiette_priv_recette: HashSet<Ingredient> = HashSet::new();
+        let mut recette_priv_assiette: HashSet<Ingredient> = HashSet::new();
 
-        let chemin = match self.pathfind_case((x, y), objective) {
-            None => return RobotAction::None,
-            Some(chemin) => chemin,
-        };
-
-        let next_pos = match chemin.get(1) {
-            Some(value) => value.clone(),
-            None => return RobotAction::None,
-        };
-
-        let direction = match next_pos {
-            (x1, y1) if (x1, y1) == (x, y - 1) => Direction::North,
-            (x1, y1) if (x1, y1) == (x, y + 1) => Direction::South,
-            (x1, y1) if (x1, y1) == (x - 1, y) => Direction::West,
-            (x1, y1) if (x1, y1) == (x + 1, y) => Direction::East,
-            _ => return RobotAction::None,
-        };
-
-        if chemin.len() != 2 || self.player.get_facing() != direction {
-            // println!("ACTION: {:?}", RobotAction::Deplacer(direction));
-            return RobotAction::Deplacer(direction);
+        for recette in self.recettes.iter() {
+            let current_recette_priv_assiette = recette
+                .get_ingredients()
+                .difference(&assiette_hashset)
+                .cloned()
+                .collect::<HashSet<_>>();
+            let current_assiette_priv_recette = assiette_hashset
+                .difference(recette.get_ingredients())
+                .cloned()
+                .collect::<HashSet<_>>();
+            let current_diff =
+                current_assiette_priv_recette.len() + current_recette_priv_assiette.len();
+            if current_diff < diff {
+                diff = current_diff;
+                assiette_priv_recette = current_assiette_priv_recette;
+                recette_priv_assiette = current_recette_priv_assiette;
+            }
         }
 
-        if self.player.get_object_held().is_none() {
-            // println!("ACTION: {:?}", RobotAction::Pickup);
-            RobotAction::Pickup
-        } else {
-            // println!("ACTION: {:?}", RobotAction::Deposit);
-            RobotAction::Deposit
+        if diff == usize::MAX {
+            return vec![];
         }
+
+        // TODO: objectives have different imortance level, in a same level take the nearest objective
+        if !assiette_priv_recette.is_empty() {
+            if let Some(held_ingredient) = self.player.get_object_held() {
+                if !assiette_priv_recette.contains(&held_ingredient) {
+                    return vec![Case::Table(None)];
+                }
+            }
+            return vec![Case::ASSIETTE];
+        } else if recette_priv_assiette.is_empty() {
+            panic!("assiette = next recette mais on est pas passé à la suite ??? :\n{self:#?}");
+        }
+
+        if let Some(held_ingredient) = self.player.get_object_held() {
+            if recette_priv_assiette.contains(&held_ingredient) {
+                return vec![Case::ASSIETTE];
+            } else if recette_priv_assiette
+                .iter()
+                .find(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient))
+                .is_some()
+            {
+                return vec![Case::COUPER];
+            } else {
+                return vec![Case::Table(None)];
+            }
+        }
+
+        let mut recette_priv_assiette_vec = recette_priv_assiette.into_iter().collect::<Vec<_>>();
+        // TODO: choisir l'ingredient qui apparait dans les recettes d'apres (au cas où la recette actuelle se termine)
+        recette_priv_assiette_vec.sort();
+        let next_ingredient = recette_priv_assiette_vec[0];
+
+        vec![
+            Case::Table(Some(Ingredient {
+                type_ingredient: next_ingredient.type_ingredient,
+                etat: IngredientEtat::Coupe,
+            })),
+            Case::Table(Some(Ingredient {
+                type_ingredient: next_ingredient.type_ingredient,
+                etat: IngredientEtat::Normal,
+            })),
+            Case::Ingredient(next_ingredient.type_ingredient),
+        ]
     }
 
     fn pathfind_case(&self, start: (usize, usize), case: Case) -> Option<Vec<(usize, usize)>> {
@@ -492,7 +533,6 @@ impl Game {
         let mut explored_positions: HashSet<(usize, usize)> = HashSet::new();
         let mut next_positions: Vec<(usize, usize)> = vec![start];
         weights[start.1][start.0] = 0;
-        // println!("WEIGHTS:\n{}", weights.iter().map(|line| line.iter().map(|weight| if *weight == usize::MAX {"XX".to_string()} else {format!("{weight:2}")}).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>().join("\n"));
 
         let mut found_pos: Option<(usize, usize)> = None;
         while let Some((x, y)) = next_positions.pop() {
@@ -515,7 +555,6 @@ impl Game {
 
             if min_neighbour != usize::MAX {
                 weights[y][x] = min_neighbour + 1;
-                // println!("WEIGHTS: (checked {x},{y})\n{}", weights.iter().map(|line| line.iter().map(|weight| if *weight == usize::MAX {"XX".to_string()} else {format!("{weight:2}")}).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>().join("\n"));
             }
 
             if found_pos.is_some() {
@@ -552,10 +591,6 @@ impl Game {
                 path.insert(0, (min_x, min_y));
             }
         }
-
-        // let path_str = path.iter().map(|(x,y)| format!("({x},{y})")).collect::<Vec<_>>().join(", ");
-        // let weights_str = weights.into_iter().map(|line| line.into_iter().map(|weight| if weight == usize::MAX {"XX".to_string()} else {format!("{weight:2}")}).collect::<Vec<_>>().join(" ")).collect::<Vec<_>>().join("\n");
-        // println!("PATH: {path_str}\nWEIGHTS:\n{weights_str}");
 
         Some(path)
     }

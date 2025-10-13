@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::RangeInclusive;
 use std::time::Instant;
 use std::{fmt::Display, time::Duration};
@@ -146,14 +147,14 @@ pub enum Case {
 }
 
 pub const RECETTE_DEADLINE_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(15)..=Duration::from_secs(20);
+    Duration::from_secs(3)..=Duration::from_secs(5);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
-    ingredients: Vec<Ingredient>,
-    creation: Instant,
-    duree: Duration,
-    expiration: Instant,
+    pub ingredients: HashSet<Ingredient>,
+    pub creation: Instant,
+    pub duree: Duration,
+    pub expiration: Instant,
 }
 
 impl Recette {
@@ -176,14 +177,14 @@ impl Recette {
         let expiration = creation + duree;
 
         Self {
-            ingredients,
+            ingredients: ingredients.into_iter().collect::<HashSet<_>>(),
             creation,
             duree,
             expiration,
         }
     }
 
-    pub fn get_ingredients(&self) -> &Vec<Ingredient> {
+    pub fn get_ingredients(&self) -> &HashSet<Ingredient> {
         &self.ingredients
     }
 
@@ -199,8 +200,8 @@ impl Recette {
         &self.expiration
     }
 
-    pub fn is_too_late(&self) -> bool {
-        self.expiration <= Instant::now()
+    pub fn is_too_late(&self, now: Instant) -> bool {
+        self.expiration <= now
     }
 
     pub fn get_temps_restant(&self) -> Duration {
@@ -209,6 +210,10 @@ impl Recette {
 
     pub fn get_percent_left(&self) -> f32 {
         self.get_temps_restant().as_secs_f32() / self.duree.as_secs_f32()
+    }
+
+    pub fn is_same(&self, other: &Recette) -> bool {
+        self.ingredients.eq(&other.ingredients)
     }
 }
 
