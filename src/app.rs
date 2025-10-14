@@ -385,7 +385,7 @@ impl App {
                 }
             }
             KeyCode::Char('r') => {
-                self.game.add_random_recette();
+                self.game.add_random_recette(Instant::now());
                 app_println!(self, "Nouvelle recette ajoutée !");
             }
             _ => {}

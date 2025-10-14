@@ -12,7 +12,7 @@ use std::{
 const MAX_VIES: i32 = 100;
 
 pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(2)..=Duration::from_secs(3);
+    Duration::from_secs(8)..=Duration::from_secs(13);
 
 #[derive(Debug, PartialEq)]
 pub enum PickupError {
@@ -227,7 +227,7 @@ impl Game {
         Self {
             player: Player::new((1, 1)),
             map,
-            recettes: vec![Recette::new()],
+            recettes: vec![Recette::default()],
             assiette: Vec::new(),
             score: 0,
             vie: MAX_VIES,
@@ -303,10 +303,9 @@ impl Game {
         neighbours
     }
 
-    pub fn add_random_recette(&mut self) {
-        self.recettes.push(Recette::new());
-        self.recettes
-            .sort_by(|r1, r2| r1.get_expiration().cmp(r2.get_expiration()));
+    pub fn add_random_recette(&mut self, now: Instant) {
+        self.recettes.push(Recette::new(now));
+        self.recettes.sort_by_key(|r| r.get_expiration().clone());
     }
 
     pub fn move_player(&mut self, direction: Direction) {
@@ -400,10 +399,11 @@ impl Game {
 
         // update the too lates recettes
         self.recettes = new_recettes;
-        if self.next_recette <= now {
-            self.recettes.push(Recette::new());
-            self.next_recette = now + rand::random_range(RECETTE_COOLDOWN_RANGE)
-                - Duration::from_secs((self.score as u64) / 10);
+        if self.next_recette <= now || self.recettes.len() < 2 {
+            self.add_random_recette(now);
+            if self.next_recette <= now {
+                self.next_recette = now + rand::random_range(RECETTE_COOLDOWN_RANGE);
+            }
         }
     }
 
@@ -523,10 +523,36 @@ impl Game {
         }
 
         let mut recette_priv_assiette_vec = recette_priv_assiette.into_iter().collect::<Vec<_>>();
-        // TODO: choisir l'ingredient qui apparait dans les recettes d'apres (au cas où la recette actuelle se termine)
-        recette_priv_assiette_vec.sort();
-        let next_ingredient = recette_priv_assiette_vec[0];
 
+        // choisit l'ingredient qui apparait le plus dans les recettes d'apres (au cas où la recette actuelle se termine)
+        recette_priv_assiette_vec.sort_by(|ingr1, ingr2| {
+            let ingr1_count = self
+                .recettes
+                .iter()
+                .filter(|recette| {
+                    recette
+                        .get_ingredients()
+                        .into_iter()
+                        .collect::<HashSet<_>>()
+                        .contains(ingr1)
+                })
+                .count();
+            let ingr2_count = self
+                .recettes
+                .iter()
+                .filter(|recette| {
+                    recette
+                        .get_ingredients()
+                        .into_iter()
+                        .collect::<HashSet<_>>()
+                        .contains(ingr2)
+                })
+                .count();
+            // count par ordre décroissant et ingrédients par ordre croissant
+            ingr2_count.cmp(&ingr1_count).then(ingr1.cmp(&ingr2))
+        });
+
+        let next_ingredient = recette_priv_assiette_vec.first().unwrap();
         vec![
             vec![Case::Table(Some(Ingredient {
                 // priorité à lui

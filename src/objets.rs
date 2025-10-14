@@ -147,7 +147,7 @@ pub enum Case {
 }
 
 pub const RECETTE_DEADLINE_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(3)..=Duration::from_secs(5);
+    Duration::from_secs(10)..=Duration::from_secs(20);
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
@@ -158,7 +158,7 @@ pub struct Recette {
 }
 
 impl Recette {
-    pub fn new() -> Self {
+    pub fn new(creation: Instant) -> Self {
         let mut rng = rand::rng();
         let mut ingredients = vec![Ingredient::new(IngredientType::Pain).into_coupe()];
         let mut possibles = [
@@ -172,7 +172,6 @@ impl Recette {
             ingredients.push(choice);
         }
 
-        let creation = Instant::now();
         let duree = rng.random_range(RECETTE_DEADLINE_RANGE);
         let expiration = creation + duree;
 
@@ -182,6 +181,10 @@ impl Recette {
             duree,
             expiration,
         }
+    }
+
+    pub fn default() -> Self {
+        Recette::new(Instant::now())
     }
 
     pub fn get_ingredients(&self) -> &HashSet<Ingredient> {
