@@ -6,6 +6,7 @@ use std::{
     collections::HashSet,
     ops::RangeInclusive,
     time::{Duration, Instant},
+    usize,
 };
 
 const MAX_VIES: i32 = 100;
@@ -418,15 +419,28 @@ impl Game {
 
     fn determine_action(&self) -> RobotAction {
         let objectives = self.determine_objectives();
-
         let (x, y) = self.player.get_pos();
-        for objective in objectives {
-            let chemin = match self.pathfind_case((x, y), objective) {
-                None => continue,
-                Some(chemin) => chemin,
-            };
 
-            let next_pos = match chemin.get(1) {
+        for objective_level in objectives {
+            // parmis un niveau d'objectif, choisir celui le plus proche
+            let mut choosen_path: Vec<(usize, usize)> = Vec::new();
+            let mut choosen_dist: usize = usize::MAX;
+            for objective in objective_level {
+                match self.pathfind_case((x, y), objective) {
+                    Some(chemin) => {
+                        if chemin.len() < choosen_dist {
+                            choosen_dist = chemin.len();
+                            choosen_path = chemin;
+                        }
+                    }
+                    _ => continue,
+                };
+            }
+            if choosen_dist == usize::MAX {
+                continue;
+            }
+
+            let next_pos = match choosen_path.get(1) {
                 Some(value) => value.clone(),
                 None => continue,
             };
@@ -439,7 +453,7 @@ impl Game {
                 _ => continue,
             };
 
-            if chemin.len() != 2 || self.player.get_facing() != direction {
+            if choosen_path.len() != 2 || self.player.get_facing() != direction {
                 return RobotAction::Deplacer(direction);
             }
 
@@ -453,7 +467,7 @@ impl Game {
         RobotAction::None
     }
 
-    fn determine_objectives(&self) -> Vec<Case> {
+    fn determine_objectives(&self) -> Vec<Vec<Case>> {
         let assiette_hashset = self.assiette.clone().into_iter().collect::<HashSet<_>>();
 
         let mut diff = usize::MAX;
@@ -483,29 +497,28 @@ impl Game {
             return vec![];
         }
 
-        // TODO: objectives have different imortance level, in a same level take the nearest objective
         if !assiette_priv_recette.is_empty() {
             if let Some(held_ingredient) = self.player.get_object_held() {
                 if !assiette_priv_recette.contains(&held_ingredient) {
-                    return vec![Case::Table(None)];
+                    return vec![vec![Case::Table(None)]];
                 }
             }
-            return vec![Case::ASSIETTE];
+            return vec![vec![Case::ASSIETTE]];
         } else if recette_priv_assiette.is_empty() {
             panic!("assiette = next recette mais on est pas passé à la suite ??? :\n{self:#?}");
         }
 
         if let Some(held_ingredient) = self.player.get_object_held() {
             if recette_priv_assiette.contains(&held_ingredient) {
-                return vec![Case::ASSIETTE];
+                return vec![vec![Case::ASSIETTE]];
             } else if recette_priv_assiette
                 .iter()
                 .find(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient))
                 .is_some()
             {
-                return vec![Case::COUPER];
+                return vec![vec![Case::COUPER]];
             } else {
-                return vec![Case::Table(None)];
+                return vec![vec![Case::Table(None)]];
             }
         }
 
@@ -515,15 +528,19 @@ impl Game {
         let next_ingredient = recette_priv_assiette_vec[0];
 
         vec![
-            Case::Table(Some(Ingredient {
+            vec![Case::Table(Some(Ingredient {
+                // priorité à lui
                 type_ingredient: next_ingredient.type_ingredient,
                 etat: IngredientEtat::Coupe,
-            })),
-            Case::Table(Some(Ingredient {
-                type_ingredient: next_ingredient.type_ingredient,
-                etat: IngredientEtat::Normal,
-            })),
-            Case::Ingredient(next_ingredient.type_ingredient),
+            }))],
+            vec![
+                // sinon le plus proche d'eux
+                Case::Table(Some(Ingredient {
+                    type_ingredient: next_ingredient.type_ingredient,
+                    etat: IngredientEtat::Normal,
+                })),
+                Case::Ingredient(next_ingredient.type_ingredient),
+            ],
         ]
     }
 
