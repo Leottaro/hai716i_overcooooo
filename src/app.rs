@@ -1,5 +1,5 @@
 use crate::game::{DepositError, Game, PickupError};
-use crate::objets::{Case, Direction};
+use crate::objets::Case;
 use crate::{APP_TITLE, ROBOT_COOLDOWN};
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -31,7 +31,7 @@ macro_rules! app_println {
     };
 }
 
-fn time_to_color(percent: f32) -> Color {
+fn percent_to_color(percent: f32) -> Color {
     if percent > 0.5 {
         Color::Green
     } else if percent > 0.2 {
@@ -100,9 +100,6 @@ impl App {
         let mut next_robot = Instant::now();
 
         loop {
-            // Render UI
-            terminal.draw(|frame| self.draw(frame))?;
-
             // Gérer les événements avec timeout
             if event::poll(Duration::from_millis(16))? {
                 let return_handle = self.handle_events(robot);
@@ -111,7 +108,11 @@ impl App {
                 }
             }
 
-            if self.game.get_vies() != 0 {
+            if self.should_quit {
+                return Ok(());
+            }
+
+            if !self.game.is_finished() {
                 // Vérifier si c'est le moment de faire un tick
                 let now = Instant::now();
                 if robot && next_robot < now {
@@ -119,9 +120,9 @@ impl App {
                     next_robot = now + ROBOT_COOLDOWN;
                 }
                 self.game.tick(now);
-            }
-            if self.should_quit {
-                return Ok(());
+
+                // Render UI
+                terminal.draw(|frame| self.draw(frame))?;
             }
         }
     }
@@ -151,13 +152,16 @@ impl App {
         let [title_area, main_area, status_area] = vertical.areas(frame.area());
 
         let gauge = Gauge::default()
-            .percent(self.game.get_vies() as u16)
-            .label(format!("Vie restante: {}%", self.game.get_vies()))
+            .percent((self.game.get_percent_left() * 100.) as u16)
+            .label(format!(
+                "Temps restant: {:.2}s",
+                self.game.get_remaining_time().as_secs_f32()
+            ))
             .style(Style::default().fg(Color::White).bg(Color::Black))
             .gauge_style(
                 Style::default()
                     .bg(Color::Black)
-                    .fg(time_to_color(self.game.get_vies() as f32)),
+                    .fg(percent_to_color(self.game.get_percent_left())),
             );
         frame.render_widget(gauge, status_area);
         let horizontal = Layout::horizontal([Percentage(67), Percentage(33)]);
@@ -194,7 +198,7 @@ impl App {
 
             let recipe_box = Block::bordered()
                 .title(format!("Recette {}", i + 1))
-                .style(Style::default().bg(time_to_color(recette.get_percent_left())));
+                .style(Style::default().bg(percent_to_color(recette.get_percent_left())));
 
             let area = Rect {
                 x: padded_recipe_list.x,
@@ -212,7 +216,7 @@ impl App {
                 horizontal: 1,
             });
             let recipe_paragraph =
-                Paragraph::new(format!("Ingrédients : {}\nTemps restant :", ingredients,));
+                Paragraph::new(format!("Ingrédients : {}\nTemps restant :", ingredients));
             frame.render_widget(recipe_paragraph, para_area_padded);
 
             let gauge_area_padded = gauge_area.inner(Margin {
@@ -226,16 +230,13 @@ impl App {
                 .gauge_style(
                     Style::default()
                         .fg(Color::White)
-                        .bg(time_to_color(recette.get_percent_left())),
+                        .bg(percent_to_color(recette.get_percent_left())),
                 );
             frame.render_widget(gauge, gauge_area_padded);
         }
         frame.render_widget(Block::bordered().title(APP_TITLE), title_area);
 
-        frame.render_widget(
-            Block::bordered().title("Utilisez les flèches pour vous déplacer"),
-            status_area,
-        );
+        frame.render_widget(Block::bordered(), status_area);
 
         frame.render_widget(
             Block::bordered()
@@ -325,7 +326,7 @@ impl App {
         frame.render_widget(log_paragraph, right_log_area);
 
         // Si perdu, afficher une boîte modale centrée "Game Over"
-        if self.game.get_vies() == 0 {
+        if self.game.is_finished() {
             use ratatui::widgets::Clear;
             let area = frame.area();
             let width = std::cmp::min(40, area.width.saturating_sub(10));
@@ -351,7 +352,7 @@ impl App {
                 horizontal: 2,
             });
             let text = Paragraph::new(
-                "Vous avez perdu!\nAppuyez sur R pour rejouer ou Échap pour quitter.",
+                format!("Partie finie !\nScore final: {}\n\nAppuyez sur R pour rejouer \nou échap pour quitter.", self.game.get_score()),
             )
             .style(Style::default().fg(Color::White));
             frame.render_widget(text, inner);
@@ -389,18 +390,18 @@ impl App {
         }
 
         match key_code {
-            KeyCode::Up | KeyCode::Char('z') => {
-                self.game.move_player(Direction::North);
-            }
-            KeyCode::Down | KeyCode::Char('s') => {
-                self.game.move_player(Direction::South);
-            }
-            KeyCode::Left | KeyCode::Char('q') => {
-                self.game.move_player(Direction::West);
-            }
-            KeyCode::Right | KeyCode::Char('d') => {
-                self.game.move_player(Direction::East);
-            }
+            // KeyCode::Up | KeyCode::Char('z') => {
+            //     self.game.move_player(Direction::North);
+            // }
+            // KeyCode::Down | KeyCode::Char('s') => {
+            //     self.game.move_player(Direction::South);
+            // }
+            // KeyCode::Left | KeyCode::Char('q') => {
+            //     self.game.move_player(Direction::West);
+            // }
+            // KeyCode::Right | KeyCode::Char('d') => {
+            //     self.game.move_player(Direction::East);
+            // }
             KeyCode::Char(' ') => {
                 let result = self.game.pickup();
                 match result {

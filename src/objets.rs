@@ -5,7 +5,7 @@ use std::{fmt::Display, time::Duration};
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-use crate::{recette_deadline_range};
+use crate::recette_deadline_range;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Direction {

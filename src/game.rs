@@ -1,9 +1,11 @@
 use crate::{
-    objets::{Case, Direction, Ingredient, IngredientEtat, IngredientType, Recette}, player::Player, MAX_VIES, RECETTE_COOLDOWN_RANGE
+    GAME_DURATION, RECETTE_COOLDOWN_RANGE,
+    objets::{Case, Direction, Ingredient, IngredientEtat, IngredientType, Recette},
+    player::Player,
 };
 use std::{
     collections::HashSet,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 #[derive(Debug, PartialEq)]
@@ -37,8 +39,9 @@ pub struct Game {
     recettes: Vec<Recette>,
 
     score: i32,
-    vie: i32,
     next_recette: Instant,
+    end_instant: Instant,
+    is_finished: bool,
 }
 
 impl Game {
@@ -222,8 +225,9 @@ impl Game {
             recettes: vec![Recette::default_recipe()],
             assiette: Vec::new(),
             score: 0,
-            vie: MAX_VIES,
             next_recette: Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE),
+            end_instant: Instant::now() + GAME_DURATION,
+            is_finished: false,
         }
     }
 
@@ -255,8 +259,20 @@ impl Game {
         self.score
     }
 
-    pub fn get_vies(&self) -> i32 {
-        self.vie
+    pub fn get_end_instant(&self) -> &Instant {
+        &self.end_instant
+    }
+
+    pub fn get_remaining_time(&self) -> Duration {
+        self.end_instant - Instant::now()
+    }
+
+    pub fn get_percent_left(&self) -> f32 {
+        self.get_remaining_time().as_secs_f32() / GAME_DURATION.as_secs_f32()
+    }
+
+    pub fn is_finished(&self) -> bool {
+        self.is_finished
     }
 
     pub fn get_facing(&self, pos: (usize, usize)) -> ((usize, usize), Case) {
@@ -295,12 +311,12 @@ impl Game {
         neighbours
     }
 
-    pub fn add_random_recette(&mut self, now: Instant) {
+    fn add_random_recette(&mut self, now: Instant) {
         self.recettes.push(Recette::new(now));
         self.recettes.sort_by_key(|r| *r.get_expiration());
     }
 
-    pub fn move_player(&mut self, direction: Direction) {
+    fn move_player(&mut self, direction: Direction) {
         self.player.set_facing(direction);
         let wanted_pos: (usize, usize) = self.get_facing(self.player.get_pos()).0;
         if self.map[wanted_pos.1][wanted_pos.0] == Case::Vide {
@@ -309,6 +325,10 @@ impl Game {
     }
 
     pub fn pickup(&mut self) -> Result<(), PickupError> {
+        if self.is_finished {
+            return Ok(());
+        }
+
         let (facing_pos, facing_object) = self.get_facing(self.player.get_pos());
         if self.player.get_object_held().is_some() {
             return Err(PickupError::HandsFull);
@@ -335,6 +355,10 @@ impl Game {
     }
 
     pub fn deposit(&mut self) -> Result<(), DepositError> {
+        if self.is_finished {
+            return Ok(());
+        }
+
         let (facing_pos, facing_object) = self.get_facing(self.player.get_pos());
         let object_held = match self.player.take_object_held() {
             None => return Err(DepositError::HandsEmpty),
@@ -361,6 +385,10 @@ impl Game {
     }
 
     pub fn tick(&mut self, now: Instant) {
+        if self.is_finished {
+            return;
+        }
+
         let (recettes_too_late, mut new_recettes): (Vec<_>, Vec<_>) = self
             .recettes
             .clone()
@@ -373,20 +401,14 @@ impl Game {
             .iter()
             .position(|recette| assiette_hashset.eq(recette.get_ingredients()));
         if let Some(i) = recette_correspondante {
-            let bonus = self.assiette.len() as i32;
+            let bonus = self.assiette.len() as i32 * 2;
             self.score += bonus;
-            self.vie = if self.vie > MAX_VIES - bonus * 5 {
-                MAX_VIES
-            } else {
-                self.vie + bonus * 5
-            };
             self.assiette.clear();
             new_recettes.remove(i);
         }
 
         for recette in &recettes_too_late {
-            let mallus = (recette.get_ingredients().len() as i32) * 10;
-            self.vie -= if self.vie < mallus { self.vie } else { mallus };
+            self.score -= (IngredientType::iter().len() - recette.get_ingredients().len()) as i32
         }
 
         // update the too lates recettes
@@ -397,9 +419,17 @@ impl Game {
                 self.next_recette = now + rand::random_range(RECETTE_COOLDOWN_RANGE);
             }
         }
+
+        if self.end_instant <= now {
+            self.is_finished = true;
+        }
     }
 
     pub fn robot(&mut self) {
+        if self.is_finished {
+            return;
+        }
+
         let action = self.determine_action();
         match action {
             RobotAction::Deplacer(direction) => self.move_player(direction),
@@ -493,12 +523,13 @@ impl Game {
 
         if !assiette_priv_recette.is_empty() {
             if let Some(held_ingredient) = self.player.get_object_held()
-                && !recette_hashset.contains(&held_ingredient) {
-                    return vec![vec![Case::Table(None)]];
-                }
+                && !recette_hashset.contains(&held_ingredient)
+            {
+                return vec![vec![Case::Table(None)]];
+            }
             return vec![vec![Case::ASSIETTE]];
         } else if recette_priv_assiette.is_empty() {
-            panic!("assiette = next recette mais on est pas passé à la suite ??? :\n{self:#?}");
+            return vec![];
         }
 
         if let Some(held_ingredient) = self.player.get_object_held() {
