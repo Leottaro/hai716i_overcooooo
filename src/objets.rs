@@ -1,10 +1,11 @@
 use std::collections::HashSet;
-use std::ops::RangeInclusive;
 use std::time::Instant;
 use std::{fmt::Display, time::Duration};
 
 use rand::Rng;
 use rand::seq::SliceRandom;
+
+use crate::{recette_deadline_range};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
@@ -145,10 +146,6 @@ pub enum Case {
     COUPER,
     ASSIETTE,
 }
-
-pub const RECETTE_DEADLINE_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(10)..=Duration::from_secs(20);
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
     pub ingredients: HashSet<Ingredient>,
@@ -172,7 +169,7 @@ impl Recette {
             ingredients.push(choice);
         }
 
-        let duree = rng.random_range(RECETTE_DEADLINE_RANGE);
+        let duree = rng.random_range(recette_deadline_range(ingredients.len()));
         let expiration = creation + duree;
 
         Self {
@@ -183,7 +180,7 @@ impl Recette {
         }
     }
 
-    pub fn default() -> Self {
+    pub fn default_recipe() -> Self {
         Recette::new(Instant::now())
     }
 

@@ -1,5 +1,6 @@
 use crate::game::{DepositError, Game, PickupError};
 use crate::objets::{Case, Direction};
+use crate::{APP_TITLE, ROBOT_COOLDOWN};
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::Terminal;
@@ -14,7 +15,6 @@ use std::io;
 use std::time::{Duration, Instant};
 
 const BROWN: Color = Color::Rgb(142, 73, 26);
-pub const ROBOT_COOLDOWN: Duration = Duration::from_millis(100);
 
 // Macros pour rediriger les prints vers le système de log
 #[macro_export]
@@ -78,6 +78,13 @@ impl App {
         Self::default()
     }
 
+    pub fn reset_game(&mut self) {
+        self.game = Game::new();
+        self.logs.clear();
+        self.should_quit = false;
+        app_println!(self, "Partie réinitialisée");
+    }
+
     pub fn log(&mut self, message: String) {
         self.logs.push(message);
         if self.logs.len() > 100 {
@@ -104,14 +111,15 @@ impl App {
                 }
             }
 
-            // Vérifier si c'est le moment de faire un tick
-            let now = Instant::now();
-            if robot && next_robot < now {
-                self.game.robot();
-                next_robot = now + ROBOT_COOLDOWN;
+            if self.game.get_vies() != 0 {
+                // Vérifier si c'est le moment de faire un tick
+                let now = Instant::now();
+                if robot && next_robot < now {
+                    self.game.robot();
+                    next_robot = now + ROBOT_COOLDOWN;
+                }
+                self.game.tick(now);
             }
-            self.game.tick(now);
-
             if self.should_quit {
                 return Ok(());
             }
@@ -123,7 +131,7 @@ impl App {
 
         let player = self.game.get_player();
         let right_panel_content = format!(
-            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} \nDirection : {} \nAssiette: {} \nScore: {}",
+            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} \nDirection : {} \nAssiette: {} \nScore: {}\n",
             self.game
                 .get_player()
                 .get_object_held()
@@ -222,7 +230,7 @@ impl App {
                 );
             frame.render_widget(gauge, gauge_area_padded);
         }
-        frame.render_widget(Block::bordered().title("Overcook Dark Radé"), title_area);
+        frame.render_widget(Block::bordered().title(APP_TITLE), title_area);
 
         frame.render_widget(
             Block::bordered().title("Utilisez les flèches pour vous déplacer"),
@@ -315,6 +323,39 @@ impl App {
                 .style(Style::default().bg(Color::Blue)),
         );
         frame.render_widget(log_paragraph, right_log_area);
+
+        // Si perdu, afficher une boîte modale centrée "Game Over"
+        if self.game.get_vies() == 0 {
+            use ratatui::widgets::Clear;
+            let area = frame.area();
+            let width = std::cmp::min(40, area.width.saturating_sub(10));
+            let height = 7u16;
+            let x = area.x + (area.width.saturating_sub(width)) / 2;
+            let y = area.y + (area.height.saturating_sub(height)) / 2;
+            let rect = Rect {
+                x,
+                y,
+                width,
+                height,
+            };
+
+            // effacer l'arrière-plan de la zone et dessiner la boîte
+            frame.render_widget(Clear, rect);
+            let block = Block::bordered()
+                .title("Game Over")
+                .style(Style::default().bg(Color::Black).fg(Color::LightRed));
+            frame.render_widget(block, rect);
+
+            let inner = rect.inner(Margin {
+                vertical: 1,
+                horizontal: 2,
+            });
+            let text = Paragraph::new(
+                "Vous avez perdu!\nAppuyez sur R pour rejouer ou Échap pour quitter.",
+            )
+            .style(Style::default().fg(Color::White));
+            frame.render_widget(text, inner);
+        }
     }
 
     fn handle_events(&mut self, robot: bool) -> Result<()> {
@@ -323,15 +364,24 @@ impl App {
             _ => return Ok(()),
         };
 
-        if key_event.kind != KeyEventKind::Press {
+        // Accept both Press and Repeat events so keys like 'r' are handled
+        // even when the terminal emits Repeat instead of Press.
+        if key_event.kind != KeyEventKind::Press && key_event.kind != KeyEventKind::Repeat {
             return Ok(());
         }
 
         let key_code = key_event.code;
-        if key_code == KeyCode::Esc {
-            self.log_fmt("Quitter le jeu");
-            self.should_quit = true;
-            return Ok(());
+        match key_code {
+            KeyCode::Esc => {
+                self.log_fmt("Quitter le jeu");
+                self.should_quit = true;
+                return Ok(());
+            }
+            KeyCode::Char('r') => {
+                app_println!(self, "reset !!!");
+                self.reset_game();
+            }
+            _ => {}
         }
 
         if robot {
@@ -383,10 +433,6 @@ impl App {
                         app_println!(self, "Impossible de déposer à {:?}", pos)
                     }
                 }
-            }
-            KeyCode::Char('r') => {
-                self.game.add_random_recette(Instant::now());
-                app_println!(self, "Nouvelle recette ajoutée !");
             }
             _ => {}
         }

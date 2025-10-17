@@ -1,18 +1,10 @@
 use crate::{
-    objets::{Case, Direction, Ingredient, IngredientEtat, IngredientType, Recette},
-    player::Player,
+    objets::{Case, Direction, Ingredient, IngredientEtat, IngredientType, Recette}, player::Player, MAX_VIES, RECETTE_COOLDOWN_RANGE
 };
 use std::{
     collections::HashSet,
-    ops::RangeInclusive,
-    time::{Duration, Instant},
-    usize,
+    time::Instant,
 };
-
-const MAX_VIES: i32 = 100;
-
-pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
-    Duration::from_secs(8)..=Duration::from_secs(13);
 
 #[derive(Debug, PartialEq)]
 pub enum PickupError {
@@ -227,7 +219,7 @@ impl Game {
         Self {
             player: Player::new((1, 1)),
             map,
-            recettes: vec![Recette::default()],
+            recettes: vec![Recette::default_recipe()],
             assiette: Vec::new(),
             score: 0,
             vie: MAX_VIES,
@@ -305,7 +297,7 @@ impl Game {
 
     pub fn add_random_recette(&mut self, now: Instant) {
         self.recettes.push(Recette::new(now));
-        self.recettes.sort_by_key(|r| r.get_expiration().clone());
+        self.recettes.sort_by_key(|r| *r.get_expiration());
     }
 
     pub fn move_player(&mut self, direction: Direction) {
@@ -441,7 +433,7 @@ impl Game {
             }
 
             let next_pos = match choosen_path.get(1) {
-                Some(value) => value.clone(),
+                Some(value) => *value,
                 None => continue,
             };
 
@@ -473,6 +465,7 @@ impl Game {
         let mut diff = usize::MAX;
         let mut assiette_priv_recette: HashSet<Ingredient> = HashSet::new();
         let mut recette_priv_assiette: HashSet<Ingredient> = HashSet::new();
+        let mut recette_hashset: HashSet<Ingredient> = HashSet::new();
 
         for recette in self.recettes.iter() {
             let current_recette_priv_assiette = recette
@@ -490,6 +483,7 @@ impl Game {
                 diff = current_diff;
                 assiette_priv_recette = current_assiette_priv_recette;
                 recette_priv_assiette = current_recette_priv_assiette;
+                recette_hashset = recette.get_ingredients().clone();
             }
         }
 
@@ -498,11 +492,10 @@ impl Game {
         }
 
         if !assiette_priv_recette.is_empty() {
-            if let Some(held_ingredient) = self.player.get_object_held() {
-                if !assiette_priv_recette.contains(&held_ingredient) {
+            if let Some(held_ingredient) = self.player.get_object_held()
+                && !recette_hashset.contains(&held_ingredient) {
                     return vec![vec![Case::Table(None)]];
                 }
-            }
             return vec![vec![Case::ASSIETTE]];
         } else if recette_priv_assiette.is_empty() {
             panic!("assiette = next recette mais on est pas passé à la suite ??? :\n{self:#?}");
@@ -513,8 +506,7 @@ impl Game {
                 return vec![vec![Case::ASSIETTE]];
             } else if recette_priv_assiette
                 .iter()
-                .find(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient))
-                .is_some()
+                .any(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient))
             {
                 return vec![vec![Case::COUPER]];
             } else {
@@ -532,7 +524,7 @@ impl Game {
                 .filter(|recette| {
                     recette
                         .get_ingredients()
-                        .into_iter()
+                        .iter()
                         .collect::<HashSet<_>>()
                         .contains(ingr1)
                 })
@@ -543,13 +535,13 @@ impl Game {
                 .filter(|recette| {
                     recette
                         .get_ingredients()
-                        .into_iter()
+                        .iter()
                         .collect::<HashSet<_>>()
                         .contains(ingr2)
                 })
                 .count();
             // count par ordre décroissant et ingrédients par ordre croissant
-            ingr2_count.cmp(&ingr1_count).then(ingr1.cmp(&ingr2))
+            ingr2_count.cmp(&ingr1_count).then(ingr1.cmp(ingr2))
         });
 
         let next_ingredient = recette_priv_assiette_vec.first().unwrap();
@@ -636,6 +628,12 @@ impl Game {
         }
 
         Some(path)
+    }
+}
+
+impl Default for Game {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
