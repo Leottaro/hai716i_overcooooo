@@ -446,7 +446,6 @@ impl Game {
                 .any(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient) && ingr.cuisable.eq(&true))
 
             {
-                print!("ici");
                 return vec![vec![Case::CUIRE]];
             } else {
                 return vec![vec![Case::Table(None)]];
