@@ -71,6 +71,9 @@ impl Game {
                     "C" => {
                         map[i][j] = Case::COUPER;
                     }
+                    "F" => {
+                        map[i][j] = Case::CUIRE;
+                    }
                     "A" => {
                         map[i][j] = Case::ASSIETTE;
                     }
@@ -88,6 +91,9 @@ impl Game {
                             }
                             "P" => {
                                 map[i][j] = Case::Ingredient(IngredientType::Pain);
+                            }
+                            "C" => {
+                                map[i][j] = Case::Ingredient(IngredientType::Poulet);
                             }
                             _ => {
 
