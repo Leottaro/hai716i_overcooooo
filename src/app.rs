@@ -285,7 +285,7 @@ impl App {
                             (Style::default().bg(Color::DarkGray).fg(Color::White), "🍽️")
                         }
                         Case::CUIRE => {
-                            (Style::default().bg(Color::LightBlue).fg(Color::Black), "🔥")
+                            (Style::default().bg(Color::LightBlue).fg(Color::Black), "🎛️")
                         }
                         _ => (Style::default().bg(Color::White).fg(Color::White), " "),
                     }
