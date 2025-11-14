@@ -1,5 +1,6 @@
-use crate::game::{DepositError, Game, PickupError};
+use crate::game::Game;
 use crate::objets::Case;
+use crate::player::PlayerHand;
 use crate::{APP_TITLE, ROBOT_COOLDOWN};
 use color_eyre::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -116,7 +117,7 @@ impl App {
                 // Vérifier si c'est le moment de faire un tick
                 let now = Instant::now();
                 if robot && next_robot < now {
-                    self.game.robot();
+                    self.game.robot(now);
                     next_robot = now + ROBOT_COOLDOWN;
                 }
                 self.game.tick(now);
@@ -130,21 +131,19 @@ impl App {
     fn draw(&self, frame: &mut Frame) {
         use Constraint::{Length, Min, Percentage};
 
+        let held_item = match self.game.get_player().get_object_held() {
+            PlayerHand::Nothing => "Rien".to_string(),
+            PlayerHand::Ingredient(ingredient) => ingredient.emoji().to_string(),
+            PlayerHand::Assiette(assiette) => assiette.to_string(),
+        };
+
         let player = self.game.get_player();
         let right_panel_content = format!(
-            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} \nDirection : {} \nAssiette: {} \nScore: {}\n",
-            self.game
-                .get_player()
-                .get_object_held()
-                .map_or("Rien".to_string(), |ingr| ingr.emoji().to_string()),
+            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} {} \nDirection : {} \nScore: {}",
+            held_item,
             player.get_pos(),
+            if player.is_blocked() { "(blocked)" } else { "" },
             player.get_facing().emoji(),
-            self.game
-                .get_assiette()
-                .iter()
-                .map(|ingr| ingr.emoji())
-                .collect::<Vec<_>>()
-                .join(", "),
             self.game.get_score(),
         );
 
@@ -267,27 +266,51 @@ impl App {
                 };
 
                 let (style, letter) = if (x, y) == player.get_pos() {
-                    (Style::default().bg(Color::Green).fg(Color::Black), "🧑‍🍳")
+                    (
+                        Style::default().bg(Color::Green).fg(Color::Black),
+                        "🧑‍🍳".to_string(),
+                    )
                 } else {
                     match cell {
-                        Case::Table(None) => (Style::default().bg(BROWN).fg(Color::White), " "),
-                        Case::Table(Some(ingr)) => {
-                            (Style::default().bg(BROWN).fg(Color::White), ingr.emoji())
+                        Case::Table(None) | Case::Table(Some(PlayerHand::Nothing)) => {
+                            (Style::default().bg(BROWN).fg(Color::White), " ".to_string())
                         }
+                        Case::Table(Some(PlayerHand::Ingredient(ingr))) => (
+                            Style::default().bg(BROWN).fg(Color::White),
+                            ingr.emoji().to_string(),
+                        ),
+                        Case::Table(Some(PlayerHand::Assiette(assiette))) => (
+                            Style::default().bg(BROWN).fg(Color::White),
+                            assiette.to_string(),
+                        ),
                         Case::Ingredient(ingr) => (
                             Style::default().bg(Color::Red).fg(Color::White),
-                            ingr.emoji(),
+                            ingr.emoji().to_string(),
                         ),
-                        Case::COUPER => {
-                            (Style::default().bg(Color::LightBlue).fg(Color::Black), "🔪")
-                        }
-                        Case::ASSIETTE => {
-                            (Style::default().bg(Color::DarkGray).fg(Color::White), "🍽️")
-                        }
-                        Case::CUIRE => {
-                            (Style::default().bg(Color::LightBlue).fg(Color::Black), "🎛️")
-                        }
-                        _ => (Style::default().bg(Color::White).fg(Color::White), " "),
+                        Case::Assiette => (
+                            Style::default().bg(Color::Red).fg(Color::White),
+                            "🍽️".to_string(),
+                        ),
+                        Case::Couper(_) => (
+                            Style::default().bg(Color::LightBlue).fg(Color::Black),
+                            "🔪".to_string(),
+                        ),
+                        Case::Cuire(_) => (
+                            Style::default().bg(Color::LightBlue).fg(Color::Black),
+                            "🎛️".to_string(),
+                        ),
+                        Case::Depot(None) => (
+                            Style::default().bg(Color::DarkGray).fg(Color::Black),
+                            "📥".to_string(),
+                        ),
+                        Case::Depot(Some(assiette)) => (
+                            Style::default().bg(Color::Gray).fg(Color::Black),
+                            format!("📥({})", assiette.to_string()),
+                        ),
+                        Case::Vide => (
+                            Style::default().bg(Color::White).fg(Color::White),
+                            " ".to_string(),
+                        ),
                     }
                 };
 
@@ -405,39 +428,39 @@ impl App {
             // KeyCode::Right | KeyCode::Char('d') => {
             //     self.game.move_player(Direction::East);
             // }
-            KeyCode::Char(' ') => {
-                let result = self.game.pickup();
-                match result {
-                    Ok(()) => app_println!(self, "Objet ramassé avec succès"),
-                    Err(PickupError::HandsFull) => {
-                        app_println!(self, "Mains pleines ! Impossible de ramasser")
-                    }
-                    Err(PickupError::AssietteEmpty) => {
-                        app_println!(self, "Assiette vide ! Rien à ramasser")
-                    }
-                    Err(PickupError::TableEmpty) => {
-                        app_println!(self, "Table vide ! Rien à ramasser")
-                    }
-                    Err(PickupError::NoTarget((pos, _))) => {
-                        app_println!(self, "Impossible de ramasser à {:?}", pos)
-                    }
-                }
-            }
-            KeyCode::Char('e') => {
-                let result = self.game.deposit();
-                match result {
-                    Ok(()) => app_println!(self, "Objet déposé avec succès"),
-                    Err(DepositError::HandsEmpty) => {
-                        app_println!(self, "Mains vides ! Rien à déposer")
-                    }
-                    Err(DepositError::TableFull) => {
-                        app_println!(self, "Table occupée ! Impossible de déposer")
-                    }
-                    Err(DepositError::NoTarget((pos, _))) => {
-                        app_println!(self, "Impossible de déposer à {:?}", pos)
-                    }
-                }
-            }
+            // KeyCode::Char(' ') => {
+            //     let result = self.game.pickup();
+            //     match result {
+            //         Ok(()) => app_println!(self, "Objet ramassé avec succès"),
+            //         Err(PickupError::HandsFull) => {
+            //             app_println!(self, "Mains pleines ! Impossible de ramasser")
+            //         }
+            //         Err(PickupError::DepotEmpty) => {
+            //             app_println!(self, "Depot vide ! Rien à ramasser")
+            //         }
+            //         Err(PickupError::TableEmpty) => {
+            //             app_println!(self, "Table vide ! Rien à ramasser")
+            //         }
+            //         Err(PickupError::NoTarget((pos, _))) => {
+            //             app_println!(self, "Impossible de ramasser à {:?}", pos)
+            //         }
+            //     }
+            // }
+            // KeyCode::Char('e') => {
+            //     let result = self.game.deposit();
+            //     match result {
+            //         Ok(()) => app_println!(self, "Objet déposé avec succès"),
+            //         Err(DepositError::HandsEmpty) => {
+            //             app_println!(self, "Mains vides ! Rien à déposer")
+            //         }
+            //         Err(DepositError::TableFull) => {
+            //             app_println!(self, "Table occupée ! Impossible de déposer")
+            //         }
+            //         Err(DepositError::NoTarget((pos, _))) => {
+            //             app_println!(self, "Impossible de déposer à {:?}", pos)
+            //         }
+            //     }
+            // }
             _ => {}
         }
         Ok(())

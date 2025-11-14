@@ -5,6 +5,7 @@ use std::{fmt::Display, time::Duration};
 use rand::Rng;
 use rand::seq::SliceRandom;
 
+use crate::player::PlayerHand;
 use crate::recette_deadline_range;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -89,6 +90,7 @@ pub enum IngredientEtat {
     Normal,
     Coupe,
 }
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum IngredientCuisson {
     Cru,
@@ -116,14 +118,12 @@ pub struct Ingredient {
 
 impl Ingredient {
     pub fn new(type_ingredient: IngredientType) -> Self {
-
         let cuisable = match type_ingredient {
             IngredientType::Pain => false,
             IngredientType::Salade => false,
             IngredientType::Tomate => false,
             IngredientType::Oignon => false,
             IngredientType::Poulet => true,
-            
         };
         Self {
             type_ingredient,
@@ -149,6 +149,9 @@ impl Ingredient {
     }
 
     pub fn couper(&mut self) {
+        if self.etat != IngredientEtat::Normal {
+            panic!("Impossible de couper un ingrédient non Normal");
+        }
         self.etat = IngredientEtat::Coupe;
     }
 
@@ -160,6 +163,11 @@ impl Ingredient {
     pub fn cuire(&mut self) {
         self.cuisson = IngredientCuisson::Cuit;
     }
+
+    pub fn bruler(&mut self) {
+        self.cuisson = IngredientCuisson::Brule;
+    }
+
     pub fn into_cuit(mut self) -> Self {
         self.cuire();
         self
@@ -172,14 +180,48 @@ impl Display for Ingredient {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub struct Assiette {
+    pub ingredients: Vec<Ingredient>,
+}
+impl Assiette {
+    pub fn new() -> Assiette {
+        Self {
+            ingredients: Vec::new(),
+        }
+    }
+
+    pub fn create_with(ingredient: Ingredient) -> Assiette {
+        Self {
+            ingredients: vec![ingredient],
+        }
+    }
+
+    pub fn get_hashset(&self) -> HashSet<Ingredient> {
+        self.ingredients.iter().cloned().collect::<HashSet<_>>()
+    }
+
+    pub fn to_string(&self) -> String {
+        format!(
+            "🍽️{}",
+            self.ingredients
+                .iter()
+                .map(|ingr| ingr.emoji())
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Case {
     Vide,
-    Table(Option<Ingredient>),
+    Table(Option<PlayerHand>),
+    Assiette,
     Ingredient(IngredientType),
-    COUPER,
-    CUIRE,
-    ASSIETTE,
+    Couper(Option<(usize, Ingredient, Instant)>),
+    Cuire(Option<(Ingredient, Instant, Instant)>),
+    Depot(Option<Assiette>),
 }
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
@@ -197,7 +239,9 @@ impl Recette {
             Ingredient::new(IngredientType::Salade).into_coupe(),
             Ingredient::new(IngredientType::Tomate).into_coupe(),
             Ingredient::new(IngredientType::Oignon).into_coupe(),
-            Ingredient::new(IngredientType::Poulet).into_coupe().into_cuit(),
+            Ingredient::new(IngredientType::Poulet)
+                .into_coupe()
+                .into_cuit(),
         ];
         let n = rng.random_range(1..=possibles.len());
         possibles.shuffle(&mut rng);
