@@ -64,7 +64,7 @@ impl Default for App {
         Self {
             right_panel_content: "".to_string(),
             should_quit: false,
-            game: Game::new(),
+            game: Game::new("./src/map1.csv".to_string()),
             logs: vec![
                 "Application démarrée".to_string(),
                 "Carte générée".to_string(),
@@ -79,7 +79,7 @@ impl App {
     }
 
     pub fn reset_game(&mut self) {
-        self.game = Game::new();
+        self.game = Game::new("./src/map1.csv".to_string());
         self.logs.clear();
         self.should_quit = false;
         app_println!(self, "Partie réinitialisée");

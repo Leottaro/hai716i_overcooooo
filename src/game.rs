@@ -8,6 +8,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+use csv::{ReaderBuilder};
+
+
 #[derive(Debug, PartialEq)]
 pub enum PickupError {
     HandsFull,
@@ -45,179 +48,65 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new() -> Self {
-        let map: Vec<Vec<Case>> = vec![
-            vec![
-                Case::Table(None),
-                Case::Table(None),
-                Case::CUIRE,
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::ASSIETTE,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Ingredient(IngredientType::Pain),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::COUPER,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::COUPER,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::COUPER,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-                Case::Vide,
-                Case::Vide,
-                Case::Table(None),
-            ],
-            vec![
-                Case::Table(None),
-                Case::Ingredient(IngredientType::Tomate),
-                Case::Table(None),
-                Case::Ingredient(IngredientType::Salade),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Ingredient(IngredientType::Poulet),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Table(None),
-                Case::Ingredient(IngredientType::Oignon),
-                Case::Table(None),
-                Case::Table(None),
-            ],
-        ];
+    fn lecture_map(file: String) -> Vec<Vec<Case>> {
+        let height = 10;
+        let width = 15;
+        // Build the CSV reader and iterate over each record.
+        let mut rdr = ReaderBuilder::new().from_path(file).expect("fichier csv pas trouve");
+        let mut map: Vec<Vec<Case>> = vec![vec![Case::Vide; width]; height];
+        let mut i = 0;
+        for result in rdr.records() {
+            let record = result.expect("probleme lecture csv");
+            
+            let mut j = 0;
+            for r in record.into_iter(){
+                let r = r.replace(" ", "").replace("\t", "");
+                match r.as_str(){
+                    "" => {
+                        map[i][j] = Case::Vide;
+                    }
+                    "T" => {
+                        map[i][j] = Case::Table(None);
+                    }
+                    "C" => {
+                        map[i][j] = Case::COUPER;
+                    }
+                    "A" => {
+                        map[i][j] = Case::ASSIETTE;
+                    }
+                    s if s.starts_with("I(") && s.ends_with(")") => { // I(ingredient)
+                        let inner = &s[2..s.len()-1];
+                        match inner{
+                            "T" => {
+                                map[i][j] = Case::Ingredient(IngredientType::Tomate);
+                            }
+                            "O" => {
+                                map[i][j] = Case::Ingredient(IngredientType::Oignon);
+                            }
+                            "S" => {
+                                map[i][j] = Case::Ingredient(IngredientType::Salade);
+                            }
+                            "P" => {
+                                map[i][j] = Case::Ingredient(IngredientType::Pain);
+                            }
+                            _ => {
+
+                            }
+                        }
+                    }
+                    _ => {
+                        
+                    }
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+        map
+    }
+
+    pub fn new(file: String) -> Self {
+        let map: Vec<Vec<Case>> = Game::lecture_map(file);
 
         Self {
             player: Player::new((1, 1)),
@@ -705,7 +594,7 @@ impl Game {
 
 impl Default for Game {
     fn default() -> Self {
-        Self::new()
+        Self::new("./src/map1.csv".to_string())
     }
 }
 
