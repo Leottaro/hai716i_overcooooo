@@ -32,6 +32,7 @@ pub enum IngredientType {
     Salade,
     Tomate,
     Oignon,
+    Poulet,
 }
 
 impl IngredientType {
@@ -41,6 +42,7 @@ impl IngredientType {
             IngredientType::Salade => 's',
             IngredientType::Tomate => 't',
             IngredientType::Oignon => 'o',
+            IngredientType::Poulet => 'c',
         }
     }
 
@@ -54,6 +56,7 @@ impl IngredientType {
             IngredientType::Salade => "🥬",
             IngredientType::Tomate => "🍅",
             IngredientType::Oignon => "🧅",
+            IngredientType::Poulet => "🍗",
         }
     }
 
@@ -63,6 +66,7 @@ impl IngredientType {
             IngredientType::Salade,
             IngredientType::Tomate,
             IngredientType::Oignon,
+            IngredientType::Poulet,
         ]
     }
 }
@@ -74,6 +78,7 @@ impl Display for IngredientType {
             IngredientType::Salade => "Salade",
             IngredientType::Tomate => "Tomate",
             IngredientType::Oignon => "Oignon",
+            IngredientType::Poulet => "Poulet",
         };
         write!(f, "{str}")
     }
@@ -83,6 +88,12 @@ impl Display for IngredientType {
 pub enum IngredientEtat {
     Normal,
     Coupe,
+}
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub enum IngredientCuisson {
+    Cru,
+    Cuit,
+    Brule,
 }
 
 impl Display for IngredientEtat {
@@ -99,13 +110,26 @@ impl Display for IngredientEtat {
 pub struct Ingredient {
     pub type_ingredient: IngredientType,
     pub etat: IngredientEtat,
+    pub cuisson: IngredientCuisson,
+    pub cuisable: bool,
 }
 
 impl Ingredient {
     pub fn new(type_ingredient: IngredientType) -> Self {
+
+        let cuisable = match type_ingredient {
+            IngredientType::Pain => false,
+            IngredientType::Salade => false,
+            IngredientType::Tomate => false,
+            IngredientType::Oignon => false,
+            IngredientType::Poulet => true,
+            
+        };
         Self {
             type_ingredient,
             etat: IngredientEtat::Normal,
+            cuisson: IngredientCuisson::Cru,
+            cuisable,
         }
     }
 
@@ -119,6 +143,8 @@ impl Ingredient {
             (IngredientType::Tomate, IngredientEtat::Coupe) => "🍅",
             (IngredientType::Oignon, IngredientEtat::Normal) => "🧅",
             (IngredientType::Oignon, IngredientEtat::Coupe) => "🧅",
+            (IngredientType::Poulet, IngredientEtat::Normal) => "🍗",
+            (IngredientType::Poulet, IngredientEtat::Coupe) => "🍗",
         }
     }
 
@@ -128,6 +154,14 @@ impl Ingredient {
 
     pub fn into_coupe(mut self) -> Self {
         self.couper();
+        self
+    }
+
+    pub fn cuire(&mut self) {
+        self.cuisson = IngredientCuisson::Cuit;
+    }
+    pub fn into_cuit(mut self) -> Self {
+        self.cuire();
         self
     }
 }
@@ -144,6 +178,7 @@ pub enum Case {
     Table(Option<Ingredient>),
     Ingredient(IngredientType),
     COUPER,
+    CUIRE,
     ASSIETTE,
 }
 #[derive(Debug, PartialEq, Clone)]
@@ -162,6 +197,7 @@ impl Recette {
             Ingredient::new(IngredientType::Salade).into_coupe(),
             Ingredient::new(IngredientType::Tomate).into_coupe(),
             Ingredient::new(IngredientType::Oignon).into_coupe(),
+            Ingredient::new(IngredientType::Poulet).into_coupe().into_cuit(),
         ];
         let n = rng.random_range(1..=possibles.len());
         possibles.shuffle(&mut rng);

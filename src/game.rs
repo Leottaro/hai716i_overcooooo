@@ -1,6 +1,6 @@
 use crate::{
     GAME_DURATION, RECETTE_COOLDOWN_RANGE,
-    objets::{Case, Direction, Ingredient, IngredientEtat, IngredientType, Recette},
+    objets::{Case, Direction, Ingredient, IngredientEtat,IngredientCuisson, IngredientType, Recette},
     player::Player,
 };
 use std::{
@@ -50,7 +50,7 @@ impl Game {
             vec![
                 Case::Table(None),
                 Case::Table(None),
-                Case::Table(None),
+                Case::CUIRE,
                 Case::Table(None),
                 Case::Table(None),
                 Case::Table(None),
@@ -207,7 +207,7 @@ impl Game {
                 Case::Ingredient(IngredientType::Salade),
                 Case::Table(None),
                 Case::Table(None),
-                Case::Table(None),
+                Case::Ingredient(IngredientType::Poulet),
                 Case::Table(None),
                 Case::Table(None),
                 Case::Table(None),
@@ -378,6 +378,11 @@ impl Game {
                 ingredient.couper();
                 self.player.set_object_held(Some(ingredient));
             }
+            Case::CUIRE => {
+                let mut ingredient = object_held;
+                ingredient.cuire();
+                self.player.set_object_held(Some(ingredient));
+            }
             _ => return Err(DepositError::NoTarget((facing_pos, facing_object))),
         }
 
@@ -537,9 +542,17 @@ impl Game {
                 return vec![vec![Case::ASSIETTE]];
             } else if recette_priv_assiette
                 .iter()
-                .any(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient))
+                .any(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient) && held_ingredient.etat.eq(&IngredientEtat::Normal))
             {
                 return vec![vec![Case::COUPER]];
+            
+            } else if recette_priv_assiette
+                .iter()
+                .any(|ingr| held_ingredient.type_ingredient.eq(&ingr.type_ingredient) && ingr.cuisable.eq(&true))
+
+            {
+                print!("ici");
+                return vec![vec![Case::CUIRE]];
             } else {
                 return vec![vec![Case::Table(None)]];
             }
@@ -581,12 +594,40 @@ impl Game {
                 // priorité à lui
                 type_ingredient: next_ingredient.type_ingredient,
                 etat: IngredientEtat::Coupe,
+                cuisson: IngredientCuisson::Cuit,
+                cuisable : true,
             }))],
             vec![
                 // sinon le plus proche d'eux
                 Case::Table(Some(Ingredient {
                     type_ingredient: next_ingredient.type_ingredient,
+                    etat: IngredientEtat::Coupe,
+                    cuisson: IngredientCuisson::Cru,
+                    cuisable : true,
+                }))],
+            vec![
+                // sinon le plus proche d'eux
+                Case::Table(Some(Ingredient {
+                    type_ingredient: next_ingredient.type_ingredient,
                     etat: IngredientEtat::Normal,
+                    cuisson: IngredientCuisson::Cru,
+                    cuisable : true,
+                }))],
+            vec![
+                // sinon le plus proche d'eux
+                Case::Table(Some(Ingredient {
+                    type_ingredient: next_ingredient.type_ingredient,
+                    etat: IngredientEtat::Coupe,
+                    cuisson: IngredientCuisson::Cru,
+                    cuisable : false,
+                }))],
+            vec![
+                // sinon le plus proche d'eux
+                Case::Table(Some(Ingredient {
+                    type_ingredient: next_ingredient.type_ingredient,
+                    etat: IngredientEtat::Normal,
+                    cuisson: IngredientCuisson::Cru,
+                    cuisable : false,
                 })),
                 Case::Ingredient(next_ingredient.type_ingredient),
             ],
@@ -687,6 +728,7 @@ impl std::fmt::Display for Game {
                     Case::Ingredient(ingredient_type) => ingredient_type.upper_char().to_string(),
                     Case::COUPER => "C".to_string(),
                     Case::ASSIETTE => "O".to_string(),
+                    Case::CUIRE => "F".to_string(),
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
