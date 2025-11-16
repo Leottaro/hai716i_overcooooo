@@ -13,7 +13,7 @@ use ratatui::{
     widgets::{Block, Gauge, Paragraph},
 };
 use std::io;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const BROWN: Color = Color::Rgb(142, 73, 26);
 
@@ -136,15 +136,26 @@ impl App {
             PlayerHand::Ingredient(ingredient) => ingredient.emoji().to_string(),
             PlayerHand::Assiette(assiette) => assiette.to_string(),
         };
-
         let player = self.game.get_player();
+        let elapsed_milis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            / (2 * ROBOT_COOLDOWN.as_millis());
+
         let right_panel_content = format!(
-            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} {} \nDirection : {} \nScore: {}",
+            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} {} \nDirection : {} \nScore: {} \nObjective: {:?} \nAction: {}",
             held_item,
             player.get_pos(),
-            if player.is_blocked() { "(blocked)" } else { "" },
+            if player.is_blocked() {
+                format!("(blocked{})", ".".repeat(1 + (elapsed_milis as usize) % 3))
+            } else {
+                "".to_string()
+            },
             player.get_facing().emoji(),
             self.game.get_score(),
+            self.game.determine_objectives(),
+            self.game.determine_action(),
         );
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(5)]);

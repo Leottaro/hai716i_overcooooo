@@ -7,7 +7,8 @@ use crate::{
     player::{Player, PlayerHand},
 };
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
+    fmt::Display,
     time::{Duration, Instant},
 };
 
@@ -36,7 +37,19 @@ pub enum RobotAction {
     None,
 }
 
-#[derive(Debug, PartialEq)]
+impl Display for RobotAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RobotAction::Deplacer(direction) => write!(f, "{}", direction.emoji()),
+            RobotAction::Pickup => write!(f, "P"),
+            RobotAction::Deposit => write!(f, "D"),
+            RobotAction::None => write!(f, " "),
+        }
+    }
+}
+
+pub type CaseEvent = Box<dyn Fn(Instant) -> Option<Ingredient>>;
+
 pub struct Game {
     player: Player,
     map: Vec<Vec<Case>>,
@@ -46,7 +59,7 @@ pub struct Game {
     next_recette: Instant,
     end_instant: Instant,
     is_finished: bool,
-    // TODO: gérer les évents de cases (couper et cuire) dans une liste à part
+    case_events: HashMap<(usize, usize), CaseEvent>, // TODO: gérer les évents de cases (couper et cuire) dans une liste à part
 }
 
 impl Game {
@@ -73,7 +86,7 @@ impl Game {
                         map[i][j] = Case::Table(None);
                     }
                     "C" => {
-                        map[i][j] = Case::Couper(None);
+                        map[i][j] = Case::Couper(false);
                     }
                     "F" => {
                         map[i][j] = Case::Cuire(None);
@@ -123,6 +136,7 @@ impl Game {
             next_recette: Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE),
             end_instant: Instant::now() + GAME_DURATION,
             is_finished: false,
+            case_events: HashMap::new(),
         }
     }
 
@@ -240,9 +254,10 @@ impl Game {
             Case::Assiette => self
                 .player
                 .set_object_held(PlayerHand::Assiette(Assiette::new())),
-            Case::Cuire(Some((ingr, _, _))) => self
-                .player
-                .set_object_held(PlayerHand::Ingredient(ingr.clone())),
+            Case::Cuire(Some(ingr)) => {
+                self.player.set_object_held(PlayerHand::Ingredient(*ingr));
+                self.map[facing_pos.1][facing_pos.0] = Case::Cuire(None);
+            }
             _ => return Err(PickupError::NoTarget((facing_pos, facing_object.clone()))),
         }
 
@@ -270,21 +285,36 @@ impl Game {
             (_hand, Case::Table(Some(_))) => {
                 return Err(DepositError::TableFull);
             }
-            (PlayerHand::Ingredient(ingredient), Case::Couper(None)) => {
+            (PlayerHand::Ingredient(ingredient), Case::Couper(false)) => {
                 self.player.set_object_held(PlayerHand::Nothing);
-
                 self.player.block();
-                self.map[facing_pos.1][facing_pos.0] =
-                    Case::Couper(Some((0, ingredient.into_coupe(), now + COUPER_DURATION)));
+                self.map[facing_pos.1][facing_pos.0] = Case::Couper(true);
+                self.case_events.insert(
+                    facing_pos,
+                    Box::new(move |instant| {
+                        if instant > now + COUPER_DURATION {
+                            Some(ingredient.into_coupe())
+                        } else {
+                            None
+                        }
+                    }),
+                );
             }
             (PlayerHand::Ingredient(ingredient), Case::Cuire(None)) => {
                 self.player.set_object_held(PlayerHand::Nothing);
-
-                self.map[facing_pos.1][facing_pos.0] = Case::Cuire(Some((
-                    ingredient,
-                    now + CUIRE_DURATION,
-                    now + BRULER_DURATION,
-                )));
+                self.case_events.insert(
+                    facing_pos,
+                    Box::new(move |instant| {
+                        if instant < now + CUIRE_DURATION {
+                            Some(ingredient)
+                        } else if instant < now + BRULER_DURATION {
+                            Some(ingredient.into_cuit())
+                        } else {
+                            Some(ingredient.into_brule())
+                        }
+                    }),
+                );
+                self.map[facing_pos.1][facing_pos.0] = Case::Cuire(Some(ingredient));
             }
             (PlayerHand::Assiette(assiette), Case::Depot(None)) => {
                 self.map[facing_pos.1][facing_pos.0] = Case::Depot(Some(assiette));
@@ -330,23 +360,24 @@ impl Game {
         }
 
         // Update the Case
-        for y in 0..self.map.len() {
-            for x in 0..self.map[y].len() {
-                match self.map[y][x].clone() {
-                    Case::Couper(Some((_player, ingredient, instant))) => {
-                        if instant < now {
+        for (y, line) in self.map.iter_mut().enumerate() {
+            for (x, case) in line.iter_mut().enumerate() {
+                match case {
+                    Case::Couper(true) => {
+                        if let Some(ingredient) =
+                            self.case_events.get(&(x, y)).and_then(|func| func(now))
+                        {
                             self.player
                                 .set_object_held(PlayerHand::Ingredient(ingredient));
                             self.player.unblock();
-                            self.map[y][x] = Case::Couper(None);
+                            *case = Case::Couper(false);
                         }
                     }
-                    Case::Cuire(Some((mut ingredient, instant_cuit, instant_brule))) => {
-                        if instant_cuit < now && ingredient.cuisson != IngredientCuisson::Cuit {
-                            ingredient.cuire();
-                        }
-                        if instant_brule < now && ingredient.cuisson != IngredientCuisson::Brule {
-                            ingredient.bruler();
+                    Case::Cuire(Some(ingredient)) => {
+                        if let Some(new_ingredient) =
+                            self.case_events.get(&(x, y)).and_then(|func| func(now))
+                        {
+                            *ingredient = new_ingredient
                         }
                     }
                     Case::Depot(Some(assiette)) => {
@@ -359,7 +390,7 @@ impl Game {
                             let bonus = assiette.ingredients.len() as i32 * 2;
                             self.score += bonus;
                             self.recettes.remove(i);
-                            self.map[y][x] = Case::Depot(None);
+                            *case = Case::Depot(None);
                         }
                     }
                     _ => (),
@@ -386,7 +417,7 @@ impl Game {
         }
     }
 
-    fn determine_action(&self) -> RobotAction {
+    pub fn determine_action(&self) -> RobotAction {
         let objectives = self.determine_objectives();
         let (x, y) = self.player.get_pos();
 
@@ -436,7 +467,7 @@ impl Game {
         RobotAction::None
     }
 
-    fn determine_objectives(&self) -> Vec<Vec<Case>> {
+    pub fn determine_objectives(&self) -> Vec<Vec<Case>> {
         let mut assiettes = vec![Assiette::new()];
         if let PlayerHand::Assiette(assiette) = self.player.get_object_held() {
             assiettes.push(assiette);
@@ -494,15 +525,15 @@ impl Game {
             return vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]];
         } else if recette_priv_assiette.is_empty() {
             // assiette = recette
-            if let PlayerHand::Assiette(held_assiette) = self.player.get_object_held() {
-                if held_assiette.eq(&assiette) {
-                    return vec![vec![Case::Depot(None)]];
-                } else {
-                    return vec![vec![Case::Table(None)]];
+            return match self.player.get_object_held() {
+                PlayerHand::Nothing => {
+                    vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]]
                 }
-            } else {
-                return vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]];
-            }
+                PlayerHand::Assiette(held_assiette) if held_assiette.eq(&assiette) => {
+                    vec![vec![Case::Depot(None)]]
+                }
+                _ => vec![vec![Case::Table(None)]],
+            };
         }
 
         if let PlayerHand::Ingredient(held_ingredient) = self.player.get_object_held() {
@@ -517,7 +548,7 @@ impl Game {
                     && held_ingredient.etat.eq(&IngredientEtat::Normal)
             }) {
                 // ce qu'on a dans la main n'est pas sous la bonne forme
-                return vec![vec![Case::Couper(None)]];
+                return vec![vec![Case::Couper(false)]];
             } else if recette_priv_assiette.iter().any(|ingr| {
                 held_ingredient.type_ingredient.eq(&ingr.type_ingredient) && ingr.cuisable.eq(&true)
             }) {
@@ -571,32 +602,19 @@ impl Game {
                     etat: IngredientEtat::Coupe,
                     cuisson: IngredientCuisson::Cuit,
                     cuisable: true,
-                }))), // TODO: fix ça
-                Case::Cuire(Some((
-                    Ingredient {
-                        type_ingredient: next_ingredient.type_ingredient,
-                        etat: IngredientEtat::Coupe,
-                        cuisson: IngredientCuisson::Cuit,
-                        cuisable: true,
-                    },
-                    Instant::now(),
-                    Instant::now(),
-                ))),
+                }))),
+                Case::Cuire(Some(Ingredient {
+                    type_ingredient: next_ingredient.type_ingredient,
+                    etat: IngredientEtat::Coupe,
+                    cuisson: IngredientCuisson::Cuit,
+                    cuisable: true,
+                })),
             ],
             vec![
                 // sinon le plus proche d'eux
                 Case::Table(Some(PlayerHand::Ingredient(Ingredient {
                     type_ingredient: next_ingredient.type_ingredient,
                     etat: IngredientEtat::Coupe,
-                    cuisson: IngredientCuisson::Cru,
-                    cuisable: true,
-                }))),
-            ],
-            vec![
-                // sinon le plus proche d'eux
-                Case::Table(Some(PlayerHand::Ingredient(Ingredient {
-                    type_ingredient: next_ingredient.type_ingredient,
-                    etat: IngredientEtat::Normal,
                     cuisson: IngredientCuisson::Cru,
                     cuisable: true,
                 }))),
@@ -609,6 +627,21 @@ impl Game {
                     cuisson: IngredientCuisson::Cru,
                     cuisable: false,
                 }))),
+            ],
+            vec![
+                // sinon le plus proche d'eux
+                Case::Table(Some(PlayerHand::Ingredient(Ingredient {
+                    type_ingredient: next_ingredient.type_ingredient,
+                    etat: IngredientEtat::Normal,
+                    cuisson: IngredientCuisson::Cuit,
+                    cuisable: true,
+                }))),
+                Case::Cuire(Some(Ingredient {
+                    type_ingredient: next_ingredient.type_ingredient,
+                    etat: IngredientEtat::Normal,
+                    cuisson: IngredientCuisson::Cuit,
+                    cuisable: true,
+                })),
             ],
             vec![
                 // sinon le plus proche d'eux

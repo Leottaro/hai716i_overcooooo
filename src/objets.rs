@@ -164,12 +164,17 @@ impl Ingredient {
         self.cuisson = IngredientCuisson::Cuit;
     }
 
+    pub fn into_cuit(mut self) -> Self {
+        self.cuire();
+        self
+    }
+
     pub fn bruler(&mut self) {
         self.cuisson = IngredientCuisson::Brule;
     }
 
-    pub fn into_cuit(mut self) -> Self {
-        self.cuire();
+    pub fn into_brule(mut self) -> Self {
+        self.bruler();
         self
     }
 }
@@ -203,24 +208,24 @@ impl Assiette {
 
     pub fn to_string(&self) -> String {
         format!(
-            "🍽️{}",
+            "🍽️({})",
             self.ingredients
                 .iter()
                 .map(|ingr| ingr.emoji())
                 .collect::<Vec<_>>()
-                .join(",")
+                .join(" ")
         )
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Case {
     Vide,
     Table(Option<PlayerHand>),
     Assiette,
     Ingredient(IngredientType),
-    Couper(Option<(usize, Ingredient, Instant)>),
-    Cuire(Option<(Ingredient, Instant, Instant)>),
+    Couper(bool),
+    Cuire(Option<Ingredient>),
     Depot(Option<Assiette>),
 }
 #[derive(Debug, PartialEq, Clone)]
