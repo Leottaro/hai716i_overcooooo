@@ -129,10 +129,10 @@ impl Game {
         let map: Vec<Vec<Case>> = Game::lecture_map(file);
 
         Self {
-            players: vec![Player::new((1, 1)), Player::new((13, 8))],
+            players: vec![Player::new((1, 1)), Player::new((13, 8)), Player::new((1, 8)), Player::new((13, 1))],
             map,
             recettes: vec![Recette::default_recipe()],
-            scores: vec![0; 0],
+            scores: vec![0; 4],
             next_recette: Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE),
             end_instant: Instant::now() + GAME_DURATION,
             is_finished: false,

@@ -27,6 +27,16 @@ macro_rules! app_log {
     };
 }
 
+fn player_to_color(player_index: usize) -> Color {
+    match player_index {
+        0 => Color::Green,
+        1 => Color::Yellow,
+        2 => Color::Cyan,
+        3 => Color::Magenta,
+        _ => Color::White,
+    }
+}
+
 fn percent_to_color(percent: f32) -> Color {
     if percent > 0.5 {
         Color::Green
@@ -126,6 +136,15 @@ impl App {
         }
     }
 
+    fn coords_to_player_color(&self, x: usize, y: usize) -> Option<Color> {
+        for (i, player) in self.game.get_players().iter().enumerate() {
+            if player.get_pos() == (x, y) {
+                return Some(player_to_color(i));
+            }
+        }
+        None
+    }
+
     fn draw(&self, frame: &mut Frame) {
         use Constraint::{Length, Min, Percentage};
 
@@ -149,40 +168,33 @@ impl App {
             positions.push(p.get_pos());
         }
 
-        let right_panel_content = format!(
-            "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} {} \nDirection : {} \nScore: {} \nObjective: {:?} \nAction: {}",
-            held_item.join(", "),
-            positions,
-            if player.iter().any(|p| p.is_blocked()) {
-                format!("(blocked{})", ".".repeat(1 + (elapsed_milis as usize) % 3))
+        let mut right_panel_content = String::from("Utilisez les flèches pour vous déplacer!\n\n");
+        
+        for (i, p) in player.iter().enumerate() {
+            let blocked_indicator = if p.is_blocked() {
+            format!(" (blocked{})", ".".repeat(1 + (elapsed_milis as usize) % 3))
             } else {
-                "".to_string()
-            },
-            player
-                .iter()
-                .map(|p| p.get_facing().emoji())
-                .collect::<Vec<&str>>()
-                .join(", "),
-            self.game
-                .get_scores()
-                .iter()
-                .enumerate()
-                .map(|(i, score)| format!("J{}: {}", i + 1, score))
-                .collect::<Vec<_>>()
-                .join(", "),
-            player
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("{:?}", self.game.determine_objectives(i)))
-                .collect::<Vec<_>>()
-                .join(", "),
-            player
-                .iter()
-                .enumerate()
-                .map(|(i, _)| format!("{:?}", self.game.determine_action(i)))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
+            String::new()
+            };
+            
+            right_panel_content.push_str(&format!(
+            "=== Joueur {} ===\n\
+            Item en main: {}\n\
+            Position: {:?}{}\n\
+            Direction: {}\n\
+            Score: {}\n\
+            Objective: {:?}\n\
+            Action: {:?}\n\n",
+            i + 1,
+            held_item[i],
+            positions[i],
+            blocked_indicator,
+            p.get_facing().emoji(),
+            self.game.get_scores()[i],
+            self.game.determine_objectives(i),
+            self.game.determine_action(i)
+            ));
+        }
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(5)]);
         let [title_area, main_area, status_area] = vertical.areas(frame.area());
@@ -304,7 +316,7 @@ impl App {
 
                 let (style, letter) = if positions.contains(&(x, y)) {
                     (
-                        Style::default().bg(Color::Green).fg(Color::Black),
+                        Style::default().bg(self.coords_to_player_color(x, y).unwrap()).fg(Color::Black),
                         "🧑‍🍳".to_string(),
                     )
                 } else {
