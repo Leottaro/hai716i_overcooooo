@@ -153,7 +153,7 @@ impl App {
             held_item.push(match player.get_object_held() {
                 PlayerHand::Nothing => "Rien".to_string(),
                 PlayerHand::Ingredient(ingredient) => ingredient.emoji().to_string(),
-                PlayerHand::Assiette(assiette) => assiette.to_string(),
+                PlayerHand::Assiette((_, assiette)) => assiette.to_string(),
             });
         }
         let player = self.game.get_players();
@@ -321,14 +321,14 @@ impl App {
                     )
                 } else {
                     match cell {
-                        Case::Table(None) | Case::Table(Some(PlayerHand::Nothing)) => {
+                        Case::Table(PlayerHand::Nothing) => {
                             (Style::default().bg(BROWN).fg(Color::White), " ".to_string())
                         }
-                        Case::Table(Some(PlayerHand::Ingredient(ingr))) => (
+                        Case::Table(PlayerHand::Ingredient(ingr)) => (
                             Style::default().bg(BROWN).fg(Color::White),
                             ingr.emoji().to_string(),
                         ),
-                        Case::Table(Some(PlayerHand::Assiette(assiette))) => (
+                        Case::Table(PlayerHand::Assiette((_player, assiette))) => (
                             Style::default().bg(BROWN).fg(Color::White),
                             assiette.to_string(),
                         ),

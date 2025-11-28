@@ -231,7 +231,7 @@ impl Display for Assiette {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Case {
     Vide,
-    Table(Option<PlayerHand>),
+    Table(PlayerHand),
     Assiette,
     Ingredient(IngredientType),
     Couper(Option<usize>),

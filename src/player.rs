@@ -3,22 +3,42 @@ use crate::objets::{Assiette, Direction, Ingredient};
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum PlayerHand {
     Ingredient(Ingredient),
-    Assiette(Assiette),
+    Assiette((usize, Assiette)),
     Nothing,
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub enum PlayerRecipeStrategy {
+    First,
+    Closest,
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub enum PlayerIngredientStrategy {
+    NbApparitionInRecipe,
+    Nearest,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Player {
     position: (usize, usize),
+    recipes_strategy: PlayerRecipeStrategy,
+    ingredients_strategy: PlayerIngredientStrategy,
     object_held: PlayerHand,
     facing: Direction,
     blocked: bool,
 }
 
 impl Player {
-    pub fn new(position: (usize, usize)) -> Self {
+    pub fn new(
+        position: (usize, usize),
+        recipes_strategy: PlayerRecipeStrategy,
+        objectives_strategy: PlayerIngredientStrategy,
+    ) -> Self {
         Self {
             position,
+            recipes_strategy,
+            ingredients_strategy: objectives_strategy,
             object_held: PlayerHand::Nothing,
             facing: Direction::North,
             blocked: false,
@@ -32,6 +52,13 @@ impl Player {
     pub fn set_pos(&mut self, x: usize, y: usize, direction: Direction) {
         self.position = (x, y);
         self.facing = direction;
+    }
+
+    pub fn get_recipes_strategy(&self) -> PlayerRecipeStrategy {
+        self.recipes_strategy
+    }
+    pub fn get_ingredients_strategy(&self) -> PlayerIngredientStrategy {
+        self.ingredients_strategy
     }
 
     pub fn get_facing(&self) -> Direction {
