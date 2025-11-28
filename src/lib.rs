@@ -2,6 +2,7 @@ use std::{ops::RangeInclusive, time::Duration};
 
 pub mod app;
 pub mod game;
+pub mod logger;
 pub mod objets;
 pub mod player;
 

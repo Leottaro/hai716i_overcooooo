@@ -6,7 +6,7 @@ use rand::Rng;
 use rand::seq::SliceRandom;
 
 use crate::player::PlayerHand;
-use crate::recette_deadline_range;
+use crate::{app_log, recette_deadline_range};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
@@ -152,6 +152,7 @@ impl Ingredient {
         if self.etat != IngredientEtat::Normal {
             panic!("Impossible de couper un ingrédient non Normal");
         }
+        app_log!("Coupe de l'ingrédient {:?}", self.type_ingredient);
         self.etat = IngredientEtat::Coupe;
     }
 

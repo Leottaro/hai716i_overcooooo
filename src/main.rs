@@ -1,5 +1,5 @@
 use color_eyre::Result;
-use hai716i_poasma::{app::App};
+use hai716i_poasma::app::App;
 
 fn main() -> Result<()> {
     color_eyre::install()?;

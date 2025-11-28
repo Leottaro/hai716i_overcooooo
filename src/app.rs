@@ -1,4 +1,5 @@
 use crate::game::Game;
+use crate::logger;
 use crate::objets::Case;
 use crate::player::PlayerHand;
 use crate::{APP_TITLE, ROBOT_COOLDOWN};
@@ -13,22 +14,16 @@ use ratatui::{
     widgets::{Block, Gauge, Paragraph},
 };
 use std::io;
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const BROWN: Color = Color::Rgb(142, 73, 26);
 
 // Macros pour rediriger les prints vers le système de log
 #[macro_export]
-macro_rules! app_print {
-    ($app:expr, $($arg:tt)*) => {
-        $app.log_fmt(&format!($($arg)*))
-    };
-}
-
-#[macro_export]
-macro_rules! app_println {
-    ($app:expr, $($arg:tt)*) => {
-        $app.log_fmt(&format!($($arg)*))
+macro_rules! app_log {
+    ($($arg:tt)*) => {
+        $crate::logger::log(format!($($arg)*))
     };
 }
 
@@ -47,29 +42,22 @@ pub struct App {
     pub should_quit: bool,
     pub game: Game,
     pub logs: Vec<String>,
+    log_receiver: Receiver<String>,
 }
 
 impl Default for App {
     fn default() -> Self {
-        let mut map = vec![vec![".".to_string(); 20]; 15];
-
-        for x in 0..20 {
-            map[0][x] = "#".to_string();
-            map[14][x] = "#".to_string();
-        }
-        for row in map.iter_mut() {
-            row[0] = "#".to_string();
-            row[19] = "#".to_string();
-        }
+        let log_receiver = logger::init_logger();
+        
+        app_log!("Application démarrée");
+        app_log!("Carte générée");
 
         Self {
             right_panel_content: "".to_string(),
             should_quit: false,
             game: Game::new("./src/map1.csv".to_string()),
-            logs: vec![
-                "Application démarrée".to_string(),
-                "Carte générée".to_string(),
-            ],
+            logs: Vec::new(),
+            log_receiver,
         }
     }
 }
@@ -83,7 +71,7 @@ impl App {
         self.game = Game::new("./src/map1.csv".to_string());
         self.logs.clear();
         self.should_quit = false;
-        app_println!(self, "Partie réinitialisée");
+        app_log!("Partie réinitialisée");
     }
 
     pub fn log(&mut self, message: String) {
@@ -105,7 +93,7 @@ impl App {
             if event::poll(Duration::from_millis(16))? {
                 let return_handle = self.handle_events(robot);
                 if let Err(e) = return_handle {
-                    self.log_fmt(&format!("Erreur event: {}", e));
+                    app_log!("Erreur event: {}", e);
                 }
             }
 
@@ -121,6 +109,14 @@ impl App {
                     next_robot = now + ROBOT_COOLDOWN;
                 }
                 self.game.tick(now);
+
+                // Récupérer tous les nouveaux logs JUSTE AVANT de dessiner
+                while let Ok(msg) = self.log_receiver.try_recv() {
+                    self.logs.push(msg);
+                    if self.logs.len() > 100 {
+                        self.logs.remove(0);
+                    }
+                }
 
                 // Render UI
                 terminal.draw(|frame| self.draw(frame))?;
@@ -411,12 +407,12 @@ impl App {
         let key_code = key_event.code;
         match key_code {
             KeyCode::Esc => {
-                self.log_fmt("Quitter le jeu");
+                app_log!("Quitter le jeu");
                 self.should_quit = true;
                 return Ok(());
             }
             KeyCode::Char('r') => {
-                app_println!(self, "reset !!!");
+                app_log!("reset !!!");
                 self.reset_game();
             }
             _ => {}
