@@ -55,6 +55,7 @@ pub struct Game {
     players: Vec<Player>,
     map: Vec<Vec<Case>>,
     recettes: Vec<Recette>,
+    depot: Vec<(usize, Assiette)>,
 
     scores: Vec<i32>,
     next_recette: Instant,
@@ -94,7 +95,7 @@ impl Game {
                         map[i][j] = Case::Assiette;
                     }
                     "D" => {
-                        map[i][j] = Case::Depot(None);
+                        map[i][j] = Case::Depot;
                     }
                     s if s.starts_with("I(") && s.ends_with(")") => {
                         // I(ingredient)
@@ -128,22 +129,27 @@ impl Game {
     pub fn new(file: String) -> Self {
         let map: Vec<Vec<Case>> = Game::lecture_map(file);
 
+        let players = vec![
+            Player::new(
+                (1, 1),
+                PlayerRecipeStrategy::Closest,
+                PlayerIngredientStrategy::NbApparitionInRecipe,
+            ),
+            Player::new(
+                (13, 8),
+                PlayerRecipeStrategy::LatestExpiration,
+                PlayerIngredientStrategy::Nearest,
+            ),
+        ];
+
+        let scores = vec![0; players.len()];
+
         Self {
-            players: vec![
-                Player::new(
-                    (1, 1),
-                    PlayerRecipeStrategy::Closest,
-                    PlayerIngredientStrategy::NbApparitionInRecipe,
-                ),
-                Player::new(
-                    (13, 8),
-                    PlayerRecipeStrategy::First,
-                    PlayerIngredientStrategy::Nearest,
-                ),
-            ],
+            players,
             map,
             recettes: vec![Recette::default_recipe()],
-            scores: vec![0; 4],
+            depot: vec![],
+            scores,
             next_recette: Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE),
             end_instant: Instant::now() + GAME_DURATION,
             is_finished: false,
@@ -191,7 +197,7 @@ impl Game {
         self.is_finished
     }
 
-    pub fn get_facing(&self, pos: (usize, usize), player: usize) -> ((usize, usize), &Case) {
+    pub fn get_facing(&self, pos: (usize, usize), player: usize) -> ((usize, usize), Case) {
         let mut facing_pos: (usize, usize) = pos;
         let lenx: usize = self.map[0].len();
         let leny: usize = self.map.len();
@@ -204,10 +210,10 @@ impl Game {
         }
 
         if facing_pos.0 >= lenx || facing_pos.1 >= leny {
-            return (facing_pos, &Case::Vide);
+            return (facing_pos, Case::Vide);
         }
 
-        (facing_pos, &self.map[facing_pos.1][facing_pos.0])
+        (facing_pos, self.map[facing_pos.1][facing_pos.0].clone())
     }
 
     fn get_neighbours(&self, x: usize, y: usize) -> Vec<(usize, usize)> {
@@ -279,7 +285,10 @@ impl Game {
         }
 
         let (facing_pos, facing_object) = self.get_facing(self.players[player].get_pos(), player);
-        match (self.players[player].get_object_held(), facing_object) {
+        match (
+            self.players[player].get_object_held(),
+            facing_object.clone(),
+        ) {
             (hand, Case::Table(PlayerHand::Nothing)) => {
                 self.map[facing_pos.1][facing_pos.0] = Case::Table(hand);
                 self.players[player].set_object_held(PlayerHand::Nothing);
@@ -288,7 +297,7 @@ impl Game {
                 PlayerHand::Ingredient(ingr),
                 Case::Table(PlayerHand::Assiette((assiette_player, assiette))),
             ) => {
-                if player == *assiette_player {
+                if player == assiette_player {
                     let mut new_assiette = assiette.clone();
                     new_assiette.ingredients.push(ingr);
                     self.map[facing_pos.1][facing_pos.0] =
@@ -341,13 +350,13 @@ impl Game {
                 );
                 self.map[facing_pos.1][facing_pos.0] = Case::Cuire(Some(ingredient));
             }
-            (PlayerHand::Assiette((_, assiette)), Case::Depot(None)) => {
+            (PlayerHand::Assiette((_, assiette)), Case::Depot) => {
                 app_log!(
                     "Player {} soumet une assiette avec {} ingrédients",
                     player,
                     assiette.ingredients.len()
                 );
-                self.map[facing_pos.1][facing_pos.0] = Case::Depot(Some(assiette));
+                self.depot.push((player, assiette.clone()));
                 self.players[player].set_object_held(PlayerHand::Nothing);
             }
             (PlayerHand::Ingredient(ingredient), Case::Assiette) => {
@@ -361,7 +370,7 @@ impl Game {
                     .set_object_held(PlayerHand::Assiette((player, Assiette::new())));
             }
             (PlayerHand::Nothing, _) => return Ok(()),
-            _ => return Err(DepositError::NoTarget((facing_pos, facing_object.clone()))),
+            _ => return Err(DepositError::NoTarget((facing_pos, facing_object))),
         }
 
         Ok(())
@@ -373,23 +382,38 @@ impl Game {
         }
 
         // Update the too lates recettes
-        let (recettes_too_late, new_recettes): (Vec<_>, Vec<_>) = self
+        self.recettes = self
             .recettes
-            .clone()
-            .into_iter()
-            .partition::<Vec<_>, _>(|recette| recette.is_too_late(now));
+            .iter()
+            .filter(|recette| !recette.is_too_late(now))
+            .cloned()
+            .collect();
 
-        for recette in &recettes_too_late {
-            for score in &mut self.scores {
-                *score -= (IngredientType::iter().len() - recette.get_ingredients().len()) as i32;
-            }
-        }
-
-        self.recettes = new_recettes;
         if self.next_recette <= now || self.recettes.len() < 2 {
             self.add_random_recette(now);
             if self.next_recette <= now {
                 self.next_recette = now + rand::random_range(RECETTE_COOLDOWN_RANGE);
+            }
+        }
+
+        // Update the depot vector
+        for (player, assiette) in self.depot.drain(..) {
+            let recette_correspondante = self
+                .recettes
+                .iter()
+                .position(|recette| assiette.get_hashset().eq(recette.get_ingredients()));
+            if let Some(i) = recette_correspondante {
+                let bonus = assiette.ingredients.len() * assiette.ingredients.len()
+                    - 2 * assiette.ingredients.len()
+                    + 4;
+                self.scores[player] += bonus as i32;
+                app_log!(
+                    "Recette validée par joueur {} ! +{} points (total: {})",
+                    player,
+                    bonus,
+                    self.scores[player]
+                );
+                self.recettes.remove(i);
             }
         }
 
@@ -403,7 +427,7 @@ impl Game {
                         {
                             self.players.iter_mut().for_each(|player| {
                                 player.set_object_held(PlayerHand::Ingredient(ingredient))
-                            }); // TODO: player_id
+                            });
                             self.players.iter_mut().for_each(|player| player.unblock());
                             *case = Case::Couper(None);
                         }
@@ -413,27 +437,6 @@ impl Game {
                             self.cuire_events.get(&(x, y)).and_then(|func| func(now))
                         {
                             *ingredient = new_ingredient
-                        }
-                    }
-                    Case::Depot(Some(assiette)) => {
-                        let assiette_hashset = assiette.get_hashset();
-                        let recette_correspondante = self
-                            .recettes
-                            .iter()
-                            .position(|recette| assiette_hashset.eq(recette.get_ingredients()));
-                        // TODO on gère le score par joueur
-                        if let Some(i) = recette_correspondante {
-                            let bonus = assiette.ingredients.len() as i32 * 2;
-                            app_log!(
-                                "Recette validée ! +{} points (total: {})",
-                                bonus,
-                                self.scores.iter().sum::<i32>() + bonus
-                            );
-                            for score in &mut self.scores {
-                                *score += bonus;
-                            }
-                            self.recettes.remove(i);
-                            *case = Case::Depot(None);
                         }
                     }
                     _ => (),
@@ -518,54 +521,14 @@ impl Game {
         RobotAction::None
     }
 
-    fn determine_assiette_recette(&self, player: usize) -> (Assiette, Recette, usize) {
-        // TODO: une assiette appartient à un player
-        let mut assiettes = vec![Assiette::new()];
-        if let PlayerHand::Assiette((_, assiette)) = self.players[player].get_object_held() {
-            assiettes.push(assiette);
-        }
-        for y in 0..self.map.len() {
-            for x in 0..self.map[y].len() {
-                if let Case::Table(PlayerHand::Assiette((assiette_player, assiette))) =
-                    self.map[y][x].clone()
-                {
-                    if player == assiette_player {
-                        assiettes.push(assiette);
-                    }
-                }
-            }
-        }
-
-        let mut assiette: &Assiette = &Assiette::new();
-        let mut recette: &Recette = &Recette::new(Instant::now());
-        let mut diff = usize::MAX;
-
-        for a in assiettes.iter() {
-            assiette = a;
-            let assiette_hashset = assiette.get_hashset();
-            for current_recette in self.recettes.iter() {
-                let recette_priv_assiette = current_recette
-                    .get_ingredients()
-                    .difference(&assiette_hashset)
-                    .cloned()
-                    .collect::<HashSet<_>>();
-                let assiette_priv_recette = assiette_hashset
-                    .difference(current_recette.get_ingredients())
-                    .cloned()
-                    .collect::<HashSet<_>>();
-                let current_diff = assiette_priv_recette.len() + recette_priv_assiette.len();
-                if current_diff < diff {
-                    diff = current_diff;
-                    recette = current_recette;
-                }
-            }
-        }
-
-        (assiette.clone(), recette.clone(), diff)
-    }
-
     pub fn determine_objectives(&self, player: usize) -> Vec<Vec<Case>> {
-        let (assiette, recette, diff) = self.determine_assiette_recette(player); // TODO PlayerRecipeStrategy
+        let (assiette, recette, diff) = match self.players[player].get_recipes_strategy() {
+            PlayerRecipeStrategy::Closest => self.determine_closest_assiette_recette(player),
+            PlayerRecipeStrategy::LatestExpiration => {
+                self.determine_latest_assiette_recette(player)
+            }
+        };
+
         if diff == usize::MAX {
             return vec![];
         }
@@ -575,7 +538,7 @@ impl Game {
             match self.players[player].get_object_held() {
                 PlayerHand::Assiette((_, held_assiette)) if held_assiette.eq(&assiette) => {
                     // j'ai la bonne assiette dans la main, je dois aller la déposer
-                    return vec![vec![Case::Depot(None)]];
+                    return vec![vec![Case::Depot]];
                 }
                 PlayerHand::Nothing => {
                     // je dois aller chercher la bonne assiette
@@ -652,6 +615,94 @@ impl Game {
         }
     }
 
+    // ======================================================================================================
+    // ============================================= STRATEGIES =============================================
+    // ======================================================================================================
+
+    fn determine_latest_assiette_recette(&self, player: usize) -> (Assiette, Recette, usize) {
+        let mut assiettes = vec![];
+        if let PlayerHand::Assiette((_, assiette)) = self.players[player].get_object_held() {
+            assiettes.push(assiette);
+        }
+        for y in 0..self.map.len() {
+            for x in 0..self.map[y].len() {
+                if let Case::Table(PlayerHand::Assiette((assiette_player, assiette))) =
+                    self.map[y][x].clone()
+                {
+                    if player == assiette_player {
+                        assiettes.push(assiette);
+                    }
+                }
+            }
+        }
+        assiettes.sort_by_key(|a| a.ingredients.len());
+
+        let mut recettes = self.recettes.clone();
+        recettes.sort_by_key(|r| r.expiration);
+
+        for assiette in assiettes.into_iter().rev() {
+            for recette in self.recettes.iter().rev() {
+                let assiette_hashset = assiette.get_hashset();
+                if assiette_hashset.is_subset(&recette.ingredients) {
+                    let recette_priv_assiette = recette
+                        .ingredients
+                        .difference(&assiette_hashset)
+                        .collect::<HashSet<_>>();
+                    return (assiette, recette.clone(), recette_priv_assiette.len());
+                }
+            }
+        }
+
+        let recette = self.recettes.last().unwrap();
+        (Assiette::new(), recette.clone(), recette.ingredients.len())
+    }
+
+    fn determine_closest_assiette_recette(&self, player: usize) -> (Assiette, Recette, usize) {
+        // TODO: TOFIX (il pause plein d'assiettes partout)
+        let mut assiettes = vec![Assiette::new()];
+        if let PlayerHand::Assiette((_, assiette)) = self.players[player].get_object_held() {
+            assiettes.push(assiette);
+        }
+        for y in 0..self.map.len() {
+            for x in 0..self.map[y].len() {
+                if let Case::Table(PlayerHand::Assiette((assiette_player, assiette))) =
+                    self.map[y][x].clone()
+                {
+                    if player == assiette_player {
+                        assiettes.push(assiette);
+                    }
+                }
+            }
+        }
+
+        let mut assiette: &Assiette = &Assiette::new();
+        let mut recette: &Recette = &Recette::new(Instant::now());
+        let mut diff = usize::MAX;
+
+        for a in assiettes.iter() {
+            assiette = a;
+            let assiette_hashset = assiette.get_hashset();
+            for current_recette in self.recettes.iter() {
+                let recette_priv_assiette = current_recette
+                    .get_ingredients()
+                    .difference(&assiette_hashset)
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                let assiette_priv_recette = assiette_hashset
+                    .difference(current_recette.get_ingredients())
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                let current_diff = assiette_priv_recette.len() + recette_priv_assiette.len();
+                if current_diff < diff {
+                    diff = current_diff;
+                    recette = current_recette;
+                }
+            }
+        }
+
+        (assiette.clone(), recette.clone(), diff)
+    }
+
     fn list_objectives_distance(ingredients: HashSet<Ingredient>) -> Vec<Vec<Case>> {
         // ORDRE logique de priorité:
         // 0: coupé cuit (cuisable)
@@ -660,6 +711,7 @@ impl Game {
         // 3: normal cru (cuisable)
         // 4: normal cru (pas cuisable)
 
+        // TODO: TOFIX: il est con
         let mut objectives = vec![vec![]; 5];
 
         for next_ingredient in ingredients.into_iter() {

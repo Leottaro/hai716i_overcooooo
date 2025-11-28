@@ -9,7 +9,7 @@ pub enum PlayerHand {
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub enum PlayerRecipeStrategy {
-    First,
+    LatestExpiration,
     Closest,
 }
 

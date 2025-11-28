@@ -328,8 +328,10 @@ impl App {
                             Style::default().bg(BROWN).fg(Color::White),
                             ingr.emoji().to_string(),
                         ),
-                        Case::Table(PlayerHand::Assiette((_player, assiette))) => (
-                            Style::default().bg(BROWN).fg(Color::White),
+                        Case::Table(PlayerHand::Assiette((player, assiette))) => (
+                            Style::default()
+                                .bg(player_to_color(*player))
+                                .fg(Color::White),
                             assiette.to_string(),
                         ),
                         Case::Ingredient(ingr) => (
@@ -348,13 +350,9 @@ impl App {
                             Style::default().bg(Color::LightBlue).fg(Color::Black),
                             "🎛️".to_string(),
                         ),
-                        Case::Depot(None) => (
+                        Case::Depot => (
                             Style::default().bg(Color::DarkGray).fg(Color::Black),
                             "📥".to_string(),
-                        ),
-                        Case::Depot(Some(assiette)) => (
-                            Style::default().bg(Color::Gray).fg(Color::Black),
-                            format!("📥({})", assiette),
                         ),
                         Case::Vide => (
                             Style::default().bg(Color::White).fg(Color::White),

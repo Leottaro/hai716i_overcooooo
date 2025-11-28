@@ -236,7 +236,7 @@ pub enum Case {
     Ingredient(IngredientType),
     Couper(Option<usize>),
     Cuire(Option<Ingredient>),
-    Depot(Option<Assiette>),
+    Depot,
 }
 #[derive(Debug, PartialEq, Clone)]
 pub struct Recette {
