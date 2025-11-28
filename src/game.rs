@@ -1,6 +1,5 @@
 use crate::{
-    BRULER_DURATION, COUPER_DURATION, CUIRE_DURATION, GAME_DURATION, RECETTE_COOLDOWN_RANGE,
-    app_log,
+    COUPER_DURATION, CUIRE_DURATION, GAME_DURATION, RECETTE_COOLDOWN_RANGE, app_log,
     objets::{
         Assiette, Case, Direction, Ingredient, IngredientCuisson, IngredientEtat, IngredientType,
         Recette,
@@ -10,7 +9,6 @@ use crate::{
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    process::exit,
     time::{Duration, Instant},
 };
 
@@ -321,10 +319,8 @@ impl Game {
                     Box::new(move |instant| {
                         if instant < now + CUIRE_DURATION {
                             Some(ingredient)
-                        } else if instant < now + BRULER_DURATION {
-                            Some(ingredient.into_cuit())
                         } else {
-                            Some(ingredient.into_brule())
+                            Some(ingredient.into_cuit())
                         }
                     }),
                 );
@@ -439,9 +435,6 @@ impl Game {
         }
 
         let action = self.determine_action(player);
-        if action == RobotAction::None {
-            exit(1);
-        }
         match action {
             RobotAction::Deplacer(direction) => self.move_player(direction, player),
             RobotAction::Pickup => {
@@ -508,7 +501,8 @@ impl Game {
         RobotAction::None
     }
 
-    pub fn determine_objectives(&self, player: usize) -> Vec<Vec<Case>> {
+    fn determine_assiette_recette(&self, player: usize) -> (Assiette, Recette, usize) {
+        // TODO: une assiette appartient à un player
         let mut assiettes = vec![Assiette::new()];
         if let PlayerHand::Assiette(assiette) = self.players[player].get_object_held() {
             assiettes.push(assiette);
@@ -521,172 +515,228 @@ impl Game {
             }
         }
 
-        let mut assiette: Assiette = Assiette::new();
-        // let mut assiette_hashset: HashSet<Ingredient> = HashSet::new();
+        let mut assiette: &Assiette = &Assiette::new();
+        let mut recette: &Recette = &Recette::new(Instant::now());
         let mut diff = usize::MAX;
-        let mut assiette_priv_recette: HashSet<Ingredient> = HashSet::new();
-        let mut recette_priv_assiette: HashSet<Ingredient> = HashSet::new();
-        let mut recette_hashset: HashSet<Ingredient> = HashSet::new();
 
         for a in assiettes.iter() {
-            assiette = a.clone();
+            assiette = a;
             let assiette_hashset = assiette.get_hashset();
-            for recette in self.recettes.iter() {
-                let current_recette_priv_assiette = recette
+            for current_recette in self.recettes.iter() {
+                let recette_priv_assiette = current_recette
                     .get_ingredients()
                     .difference(&assiette_hashset)
                     .cloned()
                     .collect::<HashSet<_>>();
-                let current_assiette_priv_recette = assiette_hashset
-                    .difference(recette.get_ingredients())
+                let assiette_priv_recette = assiette_hashset
+                    .difference(current_recette.get_ingredients())
                     .cloned()
                     .collect::<HashSet<_>>();
-                let current_diff =
-                    current_assiette_priv_recette.len() + current_recette_priv_assiette.len();
+                let current_diff = assiette_priv_recette.len() + recette_priv_assiette.len();
                 if current_diff < diff {
                     diff = current_diff;
-                    assiette_priv_recette = current_assiette_priv_recette;
-                    recette_priv_assiette = current_recette_priv_assiette;
-                    recette_hashset = recette.get_ingredients().clone();
+                    recette = &current_recette;
                 }
             }
         }
 
+        (assiette.clone(), recette.clone(), diff)
+    }
+
+    pub fn determine_objectives(&self, player: usize) -> Vec<Vec<Case>> {
+        let (assiette, recette, diff) = self.determine_assiette_recette(player);
         if diff == usize::MAX {
             return vec![];
         }
 
-        if !assiette_priv_recette.is_empty() {
-            // ingr dans assiette pas dans recette
-            if let PlayerHand::Ingredient(held_ingredient) = self.players[player].get_object_held()
-                && !recette_hashset.contains(&held_ingredient)
-            {
-                return vec![vec![Case::Table(None)]];
-            }
-            return vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]];
-        } else if recette_priv_assiette.is_empty() {
+        if diff == 0 {
             // assiette = recette
-            return match self.players[player].get_object_held() {
-                PlayerHand::Nothing => {
-                    vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]]
-                }
+            match self.players[player].get_object_held() {
                 PlayerHand::Assiette(held_assiette) if held_assiette.eq(&assiette) => {
-                    vec![vec![Case::Depot(None)]]
+                    // j'ai la bonne assiette dans la main, je dois aller la déposer
+                    return vec![vec![Case::Depot(None)]];
                 }
-                _ => vec![vec![Case::Table(None)]],
+                PlayerHand::Nothing => {
+                    // je dois aller chercher la bonne assiette
+                    return vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]];
+                }
+                _ => {
+                    // j'ai autre chose dans la main, je dois le poser pour prendre la bonne assiette
+                    return vec![vec![Case::Table(None)]];
+                }
             };
         }
 
-        if let PlayerHand::Ingredient(held_ingredient) = self.players[player].get_object_held() {
-            if recette_priv_assiette.contains(&held_ingredient) {
-                // l'ingrédient dans la main est dans la recette mais pas dans l'assiette
-                return vec![vec![
-                    Case::Table(Some(PlayerHand::Assiette(assiette))),
-                    Case::Assiette,
-                ]];
-            } else if recette_priv_assiette.iter().any(|ingr| {
-                held_ingredient.type_ingredient.eq(&ingr.type_ingredient)
-                    && held_ingredient.etat.eq(&IngredientEtat::Normal)
-            }) {
-                // ce qu'on a dans la main n'est pas sous la bonne forme
-                return vec![vec![Case::Couper(None)]];
-            } else if recette_priv_assiette.iter().any(|ingr| {
-                held_ingredient.type_ingredient.eq(&ingr.type_ingredient) && ingr.cuisable.eq(&true)
-            }) {
-                // ce qu'on a dans la main n'a pas la bonne cuisson
-                return vec![vec![Case::Cuire(None)]];
-            } else {
+        if assiette
+            .get_hashset()
+            .difference(recette.get_ingredients())
+            .count()
+            > 0
+        {
+            // il y a des ingrédients en trop dans l'assiette par rapport à la recette
+
+            if let PlayerHand::Ingredient(held_ingredient) = self.players[player].get_object_held()
+                && !recette.get_ingredients().contains(&held_ingredient)
+            {
+                // j'ai un ingrédient dans la main qui n'est pas dans la recette, je dois le poser
+                return vec![vec![Case::Table(None)]];
+            }
+
+            // C'est plus rapide d'aller chercher cette assiette et de vider les ingrédients en trop que d'en construire une nouvelle
+            return vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]];
+        }
+
+        // On a rien return donc il manque des ingrédients dans l'assiette par rapport à la recette
+
+        let recette_priv_assiette = recette
+            .get_ingredients()
+            .difference(&assiette.get_hashset())
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        match self.players[player].get_object_held() {
+            PlayerHand::Ingredient(held_ingredient) => {
+                if recette_priv_assiette.contains(&held_ingredient) {
+                    // l'ingrédient dans la main est dans la recette mais pas dans l'assiette
+                    return vec![vec![
+                        Case::Table(Some(PlayerHand::Assiette(assiette))),
+                        Case::Assiette,
+                    ]];
+                } else if recette_priv_assiette.iter().any(|ingr| {
+                    held_ingredient.type_ingredient.eq(&ingr.type_ingredient)
+                        && held_ingredient.etat.eq(&IngredientEtat::Normal)
+                }) {
+                    // ce qu'on a dans la main n'est pas sous la bonne forme
+                    return vec![vec![Case::Couper(None)]];
+                } else if recette_priv_assiette.iter().any(|ingr| {
+                    held_ingredient.type_ingredient.eq(&ingr.type_ingredient)
+                        && ingr.cuisable.eq(&true)
+                }) {
+                    // ce qu'on a dans la main n'a pas la bonne cuisson
+                    return vec![vec![Case::Cuire(None)]]; // TODO: il y a moyen qu'il se stuck ici
+                }
+
                 // ce qu'on a dans la main n'est pas dans la recette
                 return vec![vec![Case::Table(None)]];
             }
-        }
+            PlayerHand::Assiette(_assiette) => return vec![vec![Case::Table(None)]],
+            PlayerHand::Nothing => {
+                let mut recette_priv_assiette_vec =
+                    recette_priv_assiette.into_iter().collect::<Vec<_>>();
 
-        if let PlayerHand::Assiette(_held_assiette) = self.players[player].get_object_held() {
-            return vec![vec![Case::Table(None)]];
-        }
-
-        let mut recette_priv_assiette_vec = recette_priv_assiette.into_iter().collect::<Vec<_>>();
-
-        // choisit l'ingredient qui apparait le plus dans les recettes d'apres (au cas où la recette actuelle se termine)
-        recette_priv_assiette_vec.sort_by(|ingr1, ingr2| {
-            let ingr1_count = self
-                .recettes
-                .iter()
-                .filter(|recette| {
-                    recette
-                        .get_ingredients()
+                // choisit l'ingredient qui apparait le plus dans les recettes d'apres (au cas où la recette actuelle se termine)
+                recette_priv_assiette_vec.sort_by(|ingr1, ingr2| {
+                    let ingr1_count = self
+                        .recettes
                         .iter()
-                        .collect::<HashSet<_>>()
-                        .contains(ingr1)
-                })
-                .count();
-            let ingr2_count = self
-                .recettes
-                .iter()
-                .filter(|recette| {
-                    recette
-                        .get_ingredients()
+                        .filter(|recette| {
+                            recette
+                                .get_ingredients()
+                                .iter()
+                                .collect::<HashSet<_>>()
+                                .contains(ingr1)
+                        })
+                        .count();
+                    let ingr2_count = self
+                        .recettes
                         .iter()
-                        .collect::<HashSet<_>>()
-                        .contains(ingr2)
-                })
-                .count();
-            // count par ordre décroissant et ingrédients par ordre croissant
-            ingr2_count.cmp(&ingr1_count).then(ingr1.cmp(ingr2))
-        });
+                        .filter(|recette| {
+                            recette
+                                .get_ingredients()
+                                .iter()
+                                .collect::<HashSet<_>>()
+                                .contains(ingr2)
+                        })
+                        .count();
+                    // cuisable d'abord puis count par ordre décroissant puis ingrédients par ordre croissant
+                    ingr2
+                        .cuisable
+                        .cmp(&ingr1.cuisable)
+                        .then(ingr2_count.cmp(&ingr1_count).then(ingr1.cmp(ingr2)))
+                });
 
-        let next_ingredient = recette_priv_assiette_vec.first().unwrap();
-        vec![
-            vec![
-                Case::Table(Some(PlayerHand::Ingredient(Ingredient {
-                    type_ingredient: next_ingredient.type_ingredient,
-                    etat: IngredientEtat::Coupe,
-                    cuisson: IngredientCuisson::Cuit,
-                    cuisable: true,
-                }))),
-                Case::Cuire(Some(Ingredient {
-                    type_ingredient: next_ingredient.type_ingredient,
-                    etat: IngredientEtat::Coupe,
-                    cuisson: IngredientCuisson::Cuit,
-                    cuisable: true,
-                })),
-            ],
-            vec![Case::Table(Some(PlayerHand::Ingredient(Ingredient {
-                type_ingredient: next_ingredient.type_ingredient,
-                etat: IngredientEtat::Coupe,
-                cuisson: IngredientCuisson::Cru,
-                cuisable: true,
-            })))],
-            vec![Case::Table(Some(PlayerHand::Ingredient(Ingredient {
-                type_ingredient: next_ingredient.type_ingredient,
-                etat: IngredientEtat::Coupe,
-                cuisson: IngredientCuisson::Cru,
-                cuisable: false,
-            })))],
-            vec![
-                Case::Table(Some(PlayerHand::Ingredient(Ingredient {
-                    type_ingredient: next_ingredient.type_ingredient,
-                    etat: IngredientEtat::Normal,
-                    cuisson: IngredientCuisson::Cuit,
-                    cuisable: true,
-                }))),
-                Case::Cuire(Some(Ingredient {
-                    type_ingredient: next_ingredient.type_ingredient,
-                    etat: IngredientEtat::Normal,
-                    cuisson: IngredientCuisson::Cuit,
-                    cuisable: true,
-                })),
-            ],
-            vec![
-                Case::Table(Some(PlayerHand::Ingredient(Ingredient {
-                    type_ingredient: next_ingredient.type_ingredient,
-                    etat: IngredientEtat::Normal,
-                    cuisson: IngredientCuisson::Cru,
-                    cuisable: false,
-                }))),
-                Case::Ingredient(next_ingredient.type_ingredient),
-            ],
-        ]
+                app_log!(
+                    "{}",
+                    recette_priv_assiette_vec
+                        .iter()
+                        .map(|ingr| ingr.type_ingredient.emoji())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+
+                let mut ingredients_pool = recette_priv_assiette_vec.into_iter();
+                let mut next_ingredient = ingredients_pool.next().unwrap();
+
+                // Si le next ingrédient est entrain d'être cuit alors on le skip (on l'aura plus tard)
+                for y in 0..self.map.len() {
+                    for x in 0..self.map[0].len() {
+                        let case = &self.map[y][x];
+                        if let Case::Cuire(Some(cuire_ingr)) = case {
+                            if cuire_ingr.type_ingredient == next_ingredient.type_ingredient
+                                && cuire_ingr.cuisson != IngredientCuisson::Cuit
+                            {
+                                next_ingredient = match ingredients_pool.next() {
+                                    Some(ingr) => ingr,
+                                    None => return vec![],
+                                }
+                            }
+                        }
+                    }
+                }
+
+                vec![
+                    vec![
+                        Case::Table(Some(PlayerHand::Ingredient(Ingredient {
+                            type_ingredient: next_ingredient.type_ingredient,
+                            etat: IngredientEtat::Coupe,
+                            cuisson: IngredientCuisson::Cuit,
+                            cuisable: true,
+                        }))),
+                        Case::Cuire(Some(Ingredient {
+                            type_ingredient: next_ingredient.type_ingredient,
+                            etat: IngredientEtat::Coupe,
+                            cuisson: IngredientCuisson::Cuit,
+                            cuisable: true,
+                        })),
+                    ],
+                    vec![Case::Table(Some(PlayerHand::Ingredient(Ingredient {
+                        type_ingredient: next_ingredient.type_ingredient,
+                        etat: IngredientEtat::Coupe,
+                        cuisson: IngredientCuisson::Cru,
+                        cuisable: true,
+                    })))],
+                    vec![Case::Table(Some(PlayerHand::Ingredient(Ingredient {
+                        type_ingredient: next_ingredient.type_ingredient,
+                        etat: IngredientEtat::Coupe,
+                        cuisson: IngredientCuisson::Cru,
+                        cuisable: false,
+                    })))],
+                    vec![
+                        Case::Table(Some(PlayerHand::Ingredient(Ingredient {
+                            type_ingredient: next_ingredient.type_ingredient,
+                            etat: IngredientEtat::Normal,
+                            cuisson: IngredientCuisson::Cuit,
+                            cuisable: true,
+                        }))),
+                        Case::Cuire(Some(Ingredient {
+                            type_ingredient: next_ingredient.type_ingredient,
+                            etat: IngredientEtat::Normal,
+                            cuisson: IngredientCuisson::Cuit,
+                            cuisable: true,
+                        })),
+                    ],
+                    vec![
+                        Case::Table(Some(PlayerHand::Ingredient(Ingredient {
+                            type_ingredient: next_ingredient.type_ingredient,
+                            etat: IngredientEtat::Normal,
+                            cuisson: IngredientCuisson::Cru,
+                            cuisable: false,
+                        }))),
+                        Case::Ingredient(next_ingredient.type_ingredient),
+                    ],
+                ]
+            }
+        }
     }
 
     fn pathfind_case(&self, start: (usize, usize), case: Case) -> Option<Vec<(usize, usize)>> {

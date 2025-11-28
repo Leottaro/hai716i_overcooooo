@@ -12,7 +12,6 @@ pub const GAME_DURATION: Duration = Duration::from_secs(120);
 const ROBOT_COOLDOWN: Duration = Duration::from_millis(100);
 pub const COUPER_DURATION: Duration = Duration::from_millis(1_500);
 pub const CUIRE_DURATION: Duration = Duration::from_millis(4_000);
-pub const BRULER_DURATION: Duration = Duration::from_millis(8_000);
 
 pub const RECETTE_COOLDOWN_RANGE: RangeInclusive<Duration> =
     Duration::from_secs(10)..=Duration::from_secs(25);

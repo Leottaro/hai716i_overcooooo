@@ -95,7 +95,6 @@ pub enum IngredientEtat {
 pub enum IngredientCuisson {
     Cru,
     Cuit,
-    Brule,
 }
 
 impl Display for IngredientEtat {
@@ -117,6 +116,16 @@ pub struct Ingredient {
 }
 
 impl Ingredient {
+    pub fn type_eq(&self, ingr2: &Ingredient) -> bool {
+        self.type_ingredient.eq(&ingr2.type_ingredient)
+    }
+    pub fn etat_eq(&self, ingr2: &Ingredient) -> bool {
+        self.etat.eq(&ingr2.etat)
+    }
+    pub fn cuisson_eq(&self, ingr2: &Ingredient) -> bool {
+        self.cuisson.eq(&ingr2.cuisson)
+    }
+
     pub fn new(type_ingredient: IngredientType) -> Self {
         let cuisable = match type_ingredient {
             IngredientType::Pain => false,
@@ -166,15 +175,6 @@ impl Ingredient {
 
     pub fn into_cuit(mut self) -> Self {
         self.cuire();
-        self
-    }
-
-    pub fn bruler(&mut self) {
-        self.cuisson = IngredientCuisson::Brule;
-    }
-
-    pub fn into_brule(mut self) -> Self {
-        self.bruler();
         self
     }
 }
