@@ -48,7 +48,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         let log_receiver = logger::init_logger();
-        
+
         app_log!("Application démarrée");
         app_log!("Carte générée");
 
@@ -151,7 +151,7 @@ impl App {
             player.get_facing().emoji(),
             self.game.get_score(),
             self.game.determine_objectives(),
-            self.game.determine_action(),
+            self.game.determine_action()
         );
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(5)]);

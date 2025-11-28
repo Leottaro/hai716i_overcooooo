@@ -225,7 +225,7 @@ pub enum Case {
     Table(Option<PlayerHand>),
     Assiette,
     Ingredient(IngredientType),
-    Couper(bool),
+    Couper(Option<usize>),
     Cuire(Option<Ingredient>),
     Depot(Option<Assiette>),
 }
@@ -242,12 +242,12 @@ impl Recette {
         let mut rng = rand::rng();
         let mut ingredients = vec![Ingredient::new(IngredientType::Pain).into_coupe()];
         let mut possibles = [
-            Ingredient::new(IngredientType::Salade).into_coupe(),
+            // Ingredient::new(IngredientType::Salade).into_coupe(),
             Ingredient::new(IngredientType::Tomate).into_coupe(),
-            Ingredient::new(IngredientType::Oignon).into_coupe(),
-            Ingredient::new(IngredientType::Poulet)
-                .into_coupe()
-                .into_cuit(),
+            // Ingredient::new(IngredientType::Oignon).into_coupe(),
+            // Ingredient::new(IngredientType::Poulet)
+            //     .into_coupe()
+            //     .into_cuit(),
         ];
         let n = rng.random_range(1..=possibles.len());
         possibles.shuffle(&mut rng);
