@@ -129,7 +129,12 @@ impl Game {
         let map: Vec<Vec<Case>> = Game::lecture_map(file);
 
         Self {
-            players: vec![Player::new((1, 1)), Player::new((13, 8)), Player::new((1, 8)), Player::new((13, 1))],
+            players: vec![
+                Player::new((1, 1)),
+                Player::new((13, 8)),
+                Player::new((1, 8)),
+                Player::new((13, 1)),
+            ],
             map,
             recettes: vec![Recette::default_recipe()],
             scores: vec![0; 4],
@@ -535,7 +540,7 @@ impl Game {
                 let current_diff = assiette_priv_recette.len() + recette_priv_assiette.len();
                 if current_diff < diff {
                     diff = current_diff;
-                    recette = &current_recette;
+                    recette = current_recette;
                 }
             }
         }
@@ -617,9 +622,9 @@ impl Game {
                 }
 
                 // ce qu'on a dans la main n'est pas dans la recette
-                return vec![vec![Case::Table(None)]];
+                vec![vec![Case::Table(None)]]
             }
-            PlayerHand::Assiette(_assiette) => return vec![vec![Case::Table(None)]],
+            PlayerHand::Assiette(_assiette) => vec![vec![Case::Table(None)]],
             PlayerHand::Nothing => {
                 let mut recette_priv_assiette_vec =
                     recette_priv_assiette.into_iter().collect::<Vec<_>>();
@@ -671,14 +676,13 @@ impl Game {
                 for y in 0..self.map.len() {
                     for x in 0..self.map[0].len() {
                         let case = &self.map[y][x];
-                        if let Case::Cuire(Some(cuire_ingr)) = case {
-                            if cuire_ingr.type_ingredient == next_ingredient.type_ingredient
-                                && cuire_ingr.cuisson != IngredientCuisson::Cuit
-                            {
-                                next_ingredient = match ingredients_pool.next() {
-                                    Some(ingr) => ingr,
-                                    None => return vec![],
-                                }
+                        if let Case::Cuire(Some(cuire_ingr)) = case
+                            && cuire_ingr.type_ingredient == next_ingredient.type_ingredient
+                            && cuire_ingr.cuisson != IngredientCuisson::Cuit
+                        {
+                            next_ingredient = match ingredients_pool.next() {
+                                Some(ingr) => ingr,
+                                None => return vec![],
                             }
                         }
                     }

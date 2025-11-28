@@ -168,31 +168,29 @@ impl App {
             positions.push(p.get_pos());
         }
 
-        let mut right_panel_content = String::from("Utilisez les flèches pour vous déplacer!\n\n");
-        
+        let mut right_panel_content = String::from("");
+
         for (i, p) in player.iter().enumerate() {
             let blocked_indicator = if p.is_blocked() {
-            format!(" (blocked{})", ".".repeat(1 + (elapsed_milis as usize) % 3))
+                format!(" (blocked{})", ".".repeat(1 + (elapsed_milis as usize) % 3))
             } else {
-            String::new()
+                String::new()
             };
-            
+
             right_panel_content.push_str(&format!(
-            "=== Joueur {} ===\n\
-            Item en main: {}\n\
-            Position: {:?}{}\n\
-            Direction: {}\n\
-            Score: {}\n\
+                "=== Joueur {} ===\n\
+            Item en main: {}  Position: {:?}{}\n\
+            Direction: {}  Score: {}\n\
             Objective: {:?}\n\
-            Action: {:?}\n\n",
-            i + 1,
-            held_item[i],
-            positions[i],
-            blocked_indicator,
-            p.get_facing().emoji(),
-            self.game.get_scores()[i],
-            self.game.determine_objectives(i),
-            self.game.determine_action(i)
+            Action: {:?}\n",
+                i + 1,
+                held_item[i],
+                positions[i],
+                blocked_indicator,
+                p.get_facing().emoji(),
+                self.game.get_scores()[i],
+                self.game.determine_objectives(i),
+                self.game.determine_action(i)
             ));
         }
 
@@ -215,7 +213,7 @@ impl App {
         let horizontal = Layout::horizontal([Percentage(67), Percentage(33)]);
         let [left_area, right_area] = horizontal.areas(main_area);
 
-        let right_vertical = Layout::vertical([Min(17), Percentage(80), Percentage(20)]);
+        let right_vertical = Layout::vertical([Min(17), Length(15), Percentage(15)]);
         let [right_info_area, right_recipe_list, right_log_area] = right_vertical.areas(right_area);
 
         // Afficher les recettes dans le panneau des recettes
@@ -316,7 +314,9 @@ impl App {
 
                 let (style, letter) = if positions.contains(&(x, y)) {
                     (
-                        Style::default().bg(self.coords_to_player_color(x, y).unwrap()).fg(Color::Black),
+                        Style::default()
+                            .bg(self.coords_to_player_color(x, y).unwrap())
+                            .fg(Color::Black),
                         "🧑‍🍳".to_string(),
                     )
                 } else {
