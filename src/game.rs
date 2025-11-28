@@ -1,5 +1,6 @@
 use crate::{
     BRULER_DURATION, COUPER_DURATION, CUIRE_DURATION, GAME_DURATION, RECETTE_COOLDOWN_RANGE,
+    app_log,
     objets::{
         Assiette, Case, Direction, Ingredient, IngredientCuisson, IngredientEtat, IngredientType,
         Recette,
@@ -53,11 +54,11 @@ impl Display for RobotAction {
 pub type CaseEvent = Box<dyn Fn(Instant) -> Option<Ingredient>>;
 
 pub struct Game {
-    player: Player,
+    players: Vec<Player>,
     map: Vec<Vec<Case>>,
     recettes: Vec<Recette>,
 
-    score: i32,
+    scores: Vec<i32>,
     next_recette: Instant,
     end_instant: Instant,
     is_finished: bool,
@@ -73,12 +74,10 @@ impl Game {
             .from_path(file)
             .expect("fichier csv pas trouve");
         let mut map: Vec<Vec<Case>> = vec![vec![Case::Vide; width]; height];
-        let mut i = 0;
-        for result in rdr.records() {
+        for (i, result) in rdr.records().enumerate() {
             let record = result.expect("probleme lecture csv");
 
-            let mut j = 0;
-            for r in record.into_iter() {
+            for (j, r) in record.into_iter().enumerate() {
                 let r = r.replace(" ", "").replace("\t", "");
                 match r.as_str() {
                     "" => {
@@ -123,9 +122,7 @@ impl Game {
                     }
                     _ => {}
                 }
-                j += 1;
             }
-            i += 1;
         }
         map
     }
@@ -134,10 +131,10 @@ impl Game {
         let map: Vec<Vec<Case>> = Game::lecture_map(file);
 
         Self {
-            player: Player::new((1, 1)),
+            players: vec![Player::new((1, 1)), Player::new((13, 8))],
             map,
             recettes: vec![Recette::default_recipe()],
-            score: 0,
+            scores: vec![0; 0],
             next_recette: Instant::now() + rand::random_range(RECETTE_COOLDOWN_RANGE),
             end_instant: Instant::now() + GAME_DURATION,
             is_finished: false,
@@ -145,8 +142,8 @@ impl Game {
         }
     }
 
-    pub fn get_player(&self) -> &Player {
-        &self.player
+    pub fn get_players(&self) -> &Vec<Player> {
+        &self.players
     }
 
     pub fn get_recettes(&self) -> &Vec<Recette> {
@@ -165,8 +162,8 @@ impl Game {
         self.map[0].len()
     }
 
-    pub fn get_score(&self) -> i32 {
-        self.score
+    pub fn get_scores(&self) -> &Vec<i32> {
+        &self.scores
     }
 
     pub fn get_end_instant(&self) -> &Instant {
@@ -185,12 +182,12 @@ impl Game {
         self.is_finished
     }
 
-    pub fn get_facing(&self, pos: (usize, usize)) -> ((usize, usize), &Case) {
+    pub fn get_facing(&self, pos: (usize, usize), player: usize) -> ((usize, usize), &Case) {
         let mut facing_pos: (usize, usize) = pos;
         let lenx: usize = self.map[0].len();
         let leny: usize = self.map.len();
 
-        match self.player.get_facing() {
+        match self.players[player].get_facing() {
             Direction::North => facing_pos.1 = pos.1 - 1,
             Direction::West => facing_pos.0 = pos.0 - 1,
             Direction::South => facing_pos.1 = pos.1 + 1,
@@ -226,41 +223,40 @@ impl Game {
         self.recettes.sort_by_key(|r| *r.get_expiration());
     }
 
-    fn move_player(&mut self, direction: Direction) {
-        if self.player.is_blocked() {
+    fn move_player(&mut self, direction: Direction, player: usize) {
+        if self.players[player].is_blocked() {
             return;
         }
-        self.player.set_facing(direction);
-        let wanted_pos: (usize, usize) = self.get_facing(self.player.get_pos()).0;
+        self.players[player].set_facing(direction);
+        let wanted_pos: (usize, usize) = self.get_facing(self.players[player].get_pos(), player).0;
         if self.map[wanted_pos.1][wanted_pos.0] == Case::Vide {
-            self.player.set_pos(wanted_pos.0, wanted_pos.1, direction);
+            self.players[player].set_pos(wanted_pos.0, wanted_pos.1, direction);
         }
     }
 
-    pub fn pickup(&mut self) -> Result<(), PickupError> {
-        if self.player.is_blocked() || self.is_finished {
+    pub fn pickup(&mut self, player: usize) -> Result<(), PickupError> {
+        if self.players[player].is_blocked() || self.is_finished {
             return Ok(());
         }
 
-        let (facing_pos, facing_object) = self.get_facing(self.player.get_pos());
-        if self.player.get_object_held() != PlayerHand::Nothing {
+        let (facing_pos, facing_object) = self.get_facing(self.players[player].get_pos(), player);
+        if self.players[player].get_object_held() != PlayerHand::Nothing {
             return Err(PickupError::HandsFull);
         }
 
-        match facing_object {
-            Case::Ingredient(object) => self
-                .player
-                .set_object_held(PlayerHand::Ingredient(Ingredient::new(*object))),
+        match facing_object.clone() {
+            Case::Ingredient(object) => self.players[player]
+                .set_object_held(PlayerHand::Ingredient(Ingredient::new(object))),
             Case::Table(Some(content)) => {
-                self.player.set_object_held(content.clone());
+                self.players[player].set_object_held(content.clone());
                 self.map[facing_pos.1][facing_pos.0] = Case::Table(None);
             }
             Case::Table(None) => return Err(PickupError::TableEmpty),
-            Case::Assiette => self
-                .player
-                .set_object_held(PlayerHand::Assiette(Assiette::new())),
+            Case::Assiette => {
+                self.players[player].set_object_held(PlayerHand::Assiette(Assiette::new()))
+            }
             Case::Cuire(Some(ingr)) => {
-                self.player.set_object_held(PlayerHand::Ingredient(*ingr));
+                self.players[player].set_object_held(PlayerHand::Ingredient(ingr));
                 self.map[facing_pos.1][facing_pos.0] = Case::Cuire(None);
             }
             _ => return Err(PickupError::NoTarget((facing_pos, facing_object.clone()))),
@@ -269,31 +265,36 @@ impl Game {
         Ok(())
     }
 
-    pub fn deposit(&mut self, now: Instant) -> Result<(), DepositError> {
-        if self.player.is_blocked() || self.is_finished {
+    pub fn deposit(&mut self, now: Instant, player: usize) -> Result<(), DepositError> {
+        if self.players[player].is_blocked() || self.is_finished {
             return Ok(());
         }
 
-        let (facing_pos, facing_object) = self.get_facing(self.player.get_pos());
-        match (self.player.get_object_held(), facing_object) {
+        let (facing_pos, facing_object) = self.get_facing(self.players[player].get_pos(), player);
+        match (self.players[player].get_object_held(), facing_object) {
             (hand, Case::Table(None)) => {
                 self.map[facing_pos.1][facing_pos.0] = Case::Table(Some(hand));
-                self.player.set_object_held(PlayerHand::Nothing);
+                self.players[player].set_object_held(PlayerHand::Nothing);
             }
             (PlayerHand::Ingredient(ingr), Case::Table(Some(PlayerHand::Assiette(assiette)))) => {
                 let mut new_assiette = assiette.clone();
                 new_assiette.ingredients.push(ingr);
                 self.map[facing_pos.1][facing_pos.0] =
                     Case::Table(Some(PlayerHand::Assiette(new_assiette)));
-                self.player.set_object_held(PlayerHand::Nothing);
+                self.players[player].set_object_held(PlayerHand::Nothing);
             }
             (_hand, Case::Table(Some(_))) => {
                 return Err(DepositError::TableFull);
             }
             (PlayerHand::Ingredient(ingredient), Case::Couper(None)) => {
-                self.player.set_object_held(PlayerHand::Nothing);
-                self.player.block();
-                self.map[facing_pos.1][facing_pos.0] = Case::Couper(Some(0)); // TODO: player_id
+                app_log!(
+                    "Player {} commence à couper {:?}",
+                    player,
+                    ingredient.type_ingredient
+                );
+                self.players[player].set_object_held(PlayerHand::Nothing);
+                self.players[player].block();
+                self.map[facing_pos.1][facing_pos.0] = Case::Couper(Some(player));
                 self.cuire_events.insert(
                     facing_pos,
                     Box::new(move |instant| {
@@ -309,7 +310,12 @@ impl Game {
                 if !ingredient.cuisable {
                     return Err(DepositError::NonCuisableIngredient);
                 }
-                self.player.set_object_held(PlayerHand::Nothing);
+                app_log!(
+                    "Player {} commence à cuire {:?}",
+                    player,
+                    ingredient.type_ingredient
+                );
+                self.players[player].set_object_held(PlayerHand::Nothing);
                 self.cuire_events.insert(
                     facing_pos,
                     Box::new(move |instant| {
@@ -325,16 +331,20 @@ impl Game {
                 self.map[facing_pos.1][facing_pos.0] = Case::Cuire(Some(ingredient));
             }
             (PlayerHand::Assiette(assiette), Case::Depot(None)) => {
+                app_log!(
+                    "Player {} soumet une assiette avec {} ingrédients",
+                    player,
+                    assiette.ingredients.len()
+                );
                 self.map[facing_pos.1][facing_pos.0] = Case::Depot(Some(assiette));
-                self.player.set_object_held(PlayerHand::Nothing);
+                self.players[player].set_object_held(PlayerHand::Nothing);
             }
             (PlayerHand::Ingredient(ingredient), Case::Assiette) => {
-                self.player
+                self.players[player]
                     .set_object_held(PlayerHand::Assiette(Assiette::create_with(ingredient)));
             }
             (PlayerHand::Nothing, Case::Assiette) => {
-                self.player
-                    .set_object_held(PlayerHand::Assiette(Assiette::new()));
+                self.players[player].set_object_held(PlayerHand::Assiette(Assiette::new()));
             }
             (PlayerHand::Nothing, _) => return Ok(()),
             _ => return Err(DepositError::NoTarget((facing_pos, facing_object.clone()))),
@@ -356,7 +366,9 @@ impl Game {
             .partition::<Vec<_>, _>(|recette| recette.is_too_late(now));
 
         for recette in &recettes_too_late {
-            self.score -= (IngredientType::iter().len() - recette.get_ingredients().len()) as i32
+            for score in &mut self.scores {
+                *score -= (IngredientType::iter().len() - recette.get_ingredients().len()) as i32;
+            }
         }
 
         self.recettes = new_recettes;
@@ -371,13 +383,15 @@ impl Game {
         for (y, line) in self.map.iter_mut().enumerate() {
             for (x, case) in line.iter_mut().enumerate() {
                 match case {
-                    Case::Couper(Some(player_id)) => {
+                    Case::Couper(Some(_)) => {
                         if let Some(ingredient) =
                             self.cuire_events.get(&(x, y)).and_then(|func| func(now))
                         {
-                            self.player
-                                .set_object_held(PlayerHand::Ingredient(ingredient)); // TODO: player_id
-                            self.player.unblock();
+                            app_log!("Coupe terminée: {:?}", ingredient.type_ingredient);
+                            self.players.iter_mut().for_each(|player| {
+                                player.set_object_held(PlayerHand::Ingredient(ingredient))
+                            }); // TODO: player_id
+                            self.players.iter_mut().for_each(|player| player.unblock());
                             *case = Case::Couper(None);
                         }
                     }
@@ -394,9 +408,17 @@ impl Game {
                             .recettes
                             .iter()
                             .position(|recette| assiette_hashset.eq(recette.get_ingredients()));
+                        // TODO on gère le score par joueur
                         if let Some(i) = recette_correspondante {
                             let bonus = assiette.ingredients.len() as i32 * 2;
-                            self.score += bonus;
+                            app_log!(
+                                "Recette validée ! +{} points (total: {})",
+                                bonus,
+                                self.scores.iter().sum::<i32>() + bonus
+                            );
+                            for score in &mut self.scores {
+                                *score += bonus;
+                            }
                             self.recettes.remove(i);
                             *case = Case::Depot(None);
                         }
@@ -411,26 +433,34 @@ impl Game {
         }
     }
 
-    pub fn robot(&mut self, now: Instant) {
+    pub fn robot(&mut self, now: Instant, player: usize) {
         if self.is_finished {
             return;
         }
 
-        let action = self.determine_action();
+        let action = self.determine_action(player);
         if action == RobotAction::None {
             exit(1);
         }
         match action {
-            RobotAction::Deplacer(direction) => self.move_player(direction),
-            RobotAction::Pickup => self.pickup().expect("Failed to pick up ingredient"),
-            RobotAction::Deposit => self.deposit(now).expect("Failed to deposit ingredient"),
+            RobotAction::Deplacer(direction) => self.move_player(direction, player),
+            RobotAction::Pickup => {
+                if let Err(e) = self.pickup(player) {
+                    app_log!("Robot {}: Pickup failed - {:?}", player, e);
+                }
+            }
+            RobotAction::Deposit => {
+                if let Err(e) = self.deposit(now, player) {
+                    app_log!("Robot {}: Deposit failed - {:?}", player, e);
+                }
+            }
             RobotAction::None => (),
         }
     }
 
-    pub fn determine_action(&self) -> RobotAction {
-        let objectives = self.determine_objectives();
-        let (x, y) = self.player.get_pos();
+    pub fn determine_action(&self, player: usize) -> RobotAction {
+        let objectives = self.determine_objectives(player);
+        let (x, y) = self.players[player].get_pos();
 
         for objective_level in objectives {
             // parmis un niveau d'objectif, choisir celui le plus proche
@@ -464,11 +494,11 @@ impl Game {
                 _ => continue,
             };
 
-            if choosen_path.len() != 2 || self.player.get_facing() != direction {
+            if choosen_path.len() != 2 || self.players[player].get_facing() != direction {
                 return RobotAction::Deplacer(direction);
             }
 
-            if self.player.get_object_held() == PlayerHand::Nothing {
+            if self.players[player].get_object_held() == PlayerHand::Nothing {
                 return RobotAction::Pickup;
             } else {
                 return RobotAction::Deposit;
@@ -478,9 +508,9 @@ impl Game {
         RobotAction::None
     }
 
-    pub fn determine_objectives(&self) -> Vec<Vec<Case>> {
+    pub fn determine_objectives(&self, player: usize) -> Vec<Vec<Case>> {
         let mut assiettes = vec![Assiette::new()];
-        if let PlayerHand::Assiette(assiette) = self.player.get_object_held() {
+        if let PlayerHand::Assiette(assiette) = self.players[player].get_object_held() {
             assiettes.push(assiette);
         }
         for y in 0..self.map.len() {
@@ -528,7 +558,7 @@ impl Game {
 
         if !assiette_priv_recette.is_empty() {
             // ingr dans assiette pas dans recette
-            if let PlayerHand::Ingredient(held_ingredient) = self.player.get_object_held()
+            if let PlayerHand::Ingredient(held_ingredient) = self.players[player].get_object_held()
                 && !recette_hashset.contains(&held_ingredient)
             {
                 return vec![vec![Case::Table(None)]];
@@ -536,7 +566,7 @@ impl Game {
             return vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]];
         } else if recette_priv_assiette.is_empty() {
             // assiette = recette
-            return match self.player.get_object_held() {
+            return match self.players[player].get_object_held() {
                 PlayerHand::Nothing => {
                     vec![vec![Case::Table(Some(PlayerHand::Assiette(assiette)))]]
                 }
@@ -547,7 +577,7 @@ impl Game {
             };
         }
 
-        if let PlayerHand::Ingredient(held_ingredient) = self.player.get_object_held() {
+        if let PlayerHand::Ingredient(held_ingredient) = self.players[player].get_object_held() {
             if recette_priv_assiette.contains(&held_ingredient) {
                 // l'ingrédient dans la main est dans la recette mais pas dans l'assiette
                 return vec![vec![
@@ -571,7 +601,7 @@ impl Game {
             }
         }
 
-        if let PlayerHand::Assiette(_held_assiette) = self.player.get_object_held() {
+        if let PlayerHand::Assiette(_held_assiette) = self.players[player].get_object_held() {
             return vec![vec![Case::Table(None)]];
         }
 

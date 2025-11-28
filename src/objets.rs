@@ -6,7 +6,7 @@ use rand::Rng;
 use rand::seq::SliceRandom;
 
 use crate::player::PlayerHand;
-use crate::{app_log, recette_deadline_range};
+use crate::recette_deadline_range;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Direction {
@@ -152,7 +152,6 @@ impl Ingredient {
         if self.etat != IngredientEtat::Normal {
             panic!("Impossible de couper un ingrédient non Normal");
         }
-        app_log!("Coupe de l'ingrédient {:?}", self.type_ingredient);
         self.etat = IngredientEtat::Coupe;
     }
 
@@ -190,6 +189,13 @@ impl Display for Ingredient {
 pub struct Assiette {
     pub ingredients: Vec<Ingredient>,
 }
+
+impl Default for Assiette {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Assiette {
     pub fn new() -> Assiette {
         Self {
@@ -206,9 +212,12 @@ impl Assiette {
     pub fn get_hashset(&self) -> HashSet<Ingredient> {
         self.ingredients.iter().cloned().collect::<HashSet<_>>()
     }
+}
 
-    pub fn to_string(&self) -> String {
-        format!(
+impl Display for Assiette {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
             "🍽️({})",
             self.ingredients
                 .iter()
@@ -242,12 +251,12 @@ impl Recette {
         let mut rng = rand::rng();
         let mut ingredients = vec![Ingredient::new(IngredientType::Pain).into_coupe()];
         let mut possibles = [
-            // Ingredient::new(IngredientType::Salade).into_coupe(),
+            Ingredient::new(IngredientType::Salade).into_coupe(),
             Ingredient::new(IngredientType::Tomate).into_coupe(),
-            // Ingredient::new(IngredientType::Oignon).into_coupe(),
-            // Ingredient::new(IngredientType::Poulet)
-            //     .into_coupe()
-            //     .into_cuit(),
+            Ingredient::new(IngredientType::Oignon).into_coupe(),
+            Ingredient::new(IngredientType::Poulet)
+                .into_coupe()
+                .into_cuit(),
         ];
         let n = rng.random_range(1..=possibles.len());
         possibles.shuffle(&mut rng);

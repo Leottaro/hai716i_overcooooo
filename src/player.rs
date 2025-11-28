@@ -49,7 +49,7 @@ impl Player {
     pub fn take_object_held(&mut self) -> PlayerHand {
         let object = self.object_held.clone();
         self.object_held = PlayerHand::Nothing;
-        return object;
+        object
     }
 
     pub fn set_object_held(&mut self, object: PlayerHand) {

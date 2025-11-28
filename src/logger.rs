@@ -1,5 +1,5 @@
-use std::sync::mpsc::{channel, Sender, Receiver};
 use once_cell::sync::OnceCell;
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 static LOG_CHANNEL: OnceCell<Sender<String>> = OnceCell::new();
 

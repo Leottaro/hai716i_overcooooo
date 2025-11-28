@@ -105,7 +105,9 @@ impl App {
                 // Vérifier si c'est le moment de faire un tick
                 let now = Instant::now();
                 if robot && next_robot < now {
-                    self.game.robot(now);
+                    for player in 0..self.game.get_players().len() {
+                        self.game.robot(now, player);
+                    }
                     next_robot = now + ROBOT_COOLDOWN;
                 }
                 self.game.tick(now);
@@ -127,31 +129,59 @@ impl App {
     fn draw(&self, frame: &mut Frame) {
         use Constraint::{Length, Min, Percentage};
 
-        let held_item = match self.game.get_player().get_object_held() {
-            PlayerHand::Nothing => "Rien".to_string(),
-            PlayerHand::Ingredient(ingredient) => ingredient.emoji().to_string(),
-            PlayerHand::Assiette(assiette) => assiette.to_string(),
-        };
-        let player = self.game.get_player();
+        let mut held_item = Vec::new();
+        for player in self.game.get_players() {
+            held_item.push(match player.get_object_held() {
+                PlayerHand::Nothing => "Rien".to_string(),
+                PlayerHand::Ingredient(ingredient) => ingredient.emoji().to_string(),
+                PlayerHand::Assiette(assiette) => assiette.to_string(),
+            });
+        }
+        let player = self.game.get_players();
         let elapsed_milis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis()
             / (2 * ROBOT_COOLDOWN.as_millis());
 
+        let mut positions = Vec::new();
+        for p in player.iter() {
+            positions.push(p.get_pos());
+        }
+
         let right_panel_content = format!(
             "Utilisez les flèches pour vous déplacer! \nItem en main: {} \nPosition: {:?} {} \nDirection : {} \nScore: {} \nObjective: {:?} \nAction: {}",
-            held_item,
-            player.get_pos(),
-            if player.is_blocked() {
+            held_item.join(", "),
+            positions,
+            if player.iter().any(|p| p.is_blocked()) {
                 format!("(blocked{})", ".".repeat(1 + (elapsed_milis as usize) % 3))
             } else {
                 "".to_string()
             },
-            player.get_facing().emoji(),
-            self.game.get_score(),
-            self.game.determine_objectives(),
-            self.game.determine_action()
+            player
+                .iter()
+                .map(|p| p.get_facing().emoji())
+                .collect::<Vec<&str>>()
+                .join(", "),
+            self.game
+                .get_scores()
+                .iter()
+                .enumerate()
+                .map(|(i, score)| format!("J{}: {}", i + 1, score))
+                .collect::<Vec<_>>()
+                .join(", "),
+            player
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("{:?}", self.game.determine_objectives(i)))
+                .collect::<Vec<_>>()
+                .join(", "),
+            player
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("{:?}", self.game.determine_action(i)))
+                .collect::<Vec<_>>()
+                .join(", "),
         );
 
         let vertical = Layout::vertical([Length(1), Min(0), Length(5)]);
@@ -272,7 +302,7 @@ impl App {
                     height: cell_height,
                 };
 
-                let (style, letter) = if (x, y) == player.get_pos() {
+                let (style, letter) = if positions.contains(&(x, y)) {
                     (
                         Style::default().bg(Color::Green).fg(Color::Black),
                         "🧑‍🍳".to_string(),
@@ -312,7 +342,7 @@ impl App {
                         ),
                         Case::Depot(Some(assiette)) => (
                             Style::default().bg(Color::Gray).fg(Color::Black),
-                            format!("📥({})", assiette.to_string()),
+                            format!("📥({})", assiette),
                         ),
                         Case::Vide => (
                             Style::default().bg(Color::White).fg(Color::White),
@@ -385,7 +415,7 @@ impl App {
                 horizontal: 2,
             });
             let text = Paragraph::new(
-                format!("Partie finie !\nScore final: {}\n\nAppuyez sur R pour rejouer \nou échap pour quitter.", self.game.get_score()),
+                format!("Partie finie !\nScore final: {:?}\n\nAppuyez sur R pour rejouer \nou échap pour quitter.", self.game.get_scores()),
             )
             .style(Style::default().fg(Color::White));
             frame.render_widget(text, inner);
@@ -422,54 +452,6 @@ impl App {
             return Ok(());
         }
 
-        match key_code {
-            // KeyCode::Up | KeyCode::Char('z') => {
-            //     self.game.move_player(Direction::North);
-            // }
-            // KeyCode::Down | KeyCode::Char('s') => {
-            //     self.game.move_player(Direction::South);
-            // }
-            // KeyCode::Left | KeyCode::Char('q') => {
-            //     self.game.move_player(Direction::West);
-            // }
-            // KeyCode::Right | KeyCode::Char('d') => {
-            //     self.game.move_player(Direction::East);
-            // }
-            // KeyCode::Char(' ') => {
-            //     let result = self.game.pickup();
-            //     match result {
-            //         Ok(()) => app_println!(self, "Objet ramassé avec succès"),
-            //         Err(PickupError::HandsFull) => {
-            //             app_println!(self, "Mains pleines ! Impossible de ramasser")
-            //         }
-            //         Err(PickupError::DepotEmpty) => {
-            //             app_println!(self, "Depot vide ! Rien à ramasser")
-            //         }
-            //         Err(PickupError::TableEmpty) => {
-            //             app_println!(self, "Table vide ! Rien à ramasser")
-            //         }
-            //         Err(PickupError::NoTarget((pos, _))) => {
-            //             app_println!(self, "Impossible de ramasser à {:?}", pos)
-            //         }
-            //     }
-            // }
-            // KeyCode::Char('e') => {
-            //     let result = self.game.deposit();
-            //     match result {
-            //         Ok(()) => app_println!(self, "Objet déposé avec succès"),
-            //         Err(DepositError::HandsEmpty) => {
-            //             app_println!(self, "Mains vides ! Rien à déposer")
-            //         }
-            //         Err(DepositError::TableFull) => {
-            //             app_println!(self, "Table occupée ! Impossible de déposer")
-            //         }
-            //         Err(DepositError::NoTarget((pos, _))) => {
-            //             app_println!(self, "Impossible de déposer à {:?}", pos)
-            //         }
-            //     }
-            // }
-            _ => {}
-        }
         Ok(())
     }
 }
