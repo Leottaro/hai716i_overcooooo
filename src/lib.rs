@@ -8,7 +8,7 @@ pub mod player;
 
 const APP_TITLE: &str = "Overcook TUI";
 
-pub const GAME_DURATION: Duration = Duration::from_secs(120);
+pub const GAME_DURATION: Duration = Duration::from_secs(60);
 const ROBOT_COOLDOWN: Duration = Duration::from_millis(100);
 pub const COUPER_DURATION: Duration = Duration::from_millis(1_500);
 pub const CUIRE_DURATION: Duration = Duration::from_millis(4_000);

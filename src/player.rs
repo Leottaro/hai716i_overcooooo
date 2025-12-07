@@ -1,4 +1,5 @@
 use crate::objets::{Assiette, Direction, Ingredient};
+use rand::Rng;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub enum PlayerHand {
@@ -17,6 +18,24 @@ pub enum PlayerRecipeStrategy {
 pub enum PlayerIngredientStrategy {
     NbApparitionInRecipe,
     Nearest,
+}
+
+pub fn random_recipe_strategy() -> PlayerRecipeStrategy {
+    let mut rng = rand::rng();
+    let strategies = [
+        PlayerRecipeStrategy::LatestExpiration,
+        PlayerRecipeStrategy::Closest,
+    ];
+    strategies[rng.random_range(0..strategies.len())]
+}
+
+pub fn random_ingredient_strategy() -> PlayerIngredientStrategy {
+    let mut rng = rand::rng();
+    let strategies = [
+        PlayerIngredientStrategy::NbApparitionInRecipe,
+        PlayerIngredientStrategy::Nearest,
+    ];
+    strategies[rng.random_range(0..strategies.len())]
 }
 
 #[derive(Debug, PartialEq, Clone)]
