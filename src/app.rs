@@ -33,6 +33,12 @@ fn player_to_color(player_index: usize) -> Color {
         1 => Color::Yellow,
         2 => Color::Cyan,
         3 => Color::Magenta,
+        4 => Color::Blue,
+        5 => Color::Red,
+        6 => Color::LightGreen,
+        7 => Color::LightYellow,
+        8 => Color::LightCyan,
+        9 => Color::LightMagenta,
         _ => Color::White,
     }
 }
@@ -53,6 +59,8 @@ pub struct App {
     pub game: Game,
     pub logs: Vec<String>,
     log_receiver: Receiver<String>,
+    nb_players: usize,
+    map: usize,
 }
 
 impl Default for App {
@@ -65,9 +73,11 @@ impl Default for App {
         Self {
             right_panel_content: "".to_string(),
             should_quit: false,
-            game: Game::new("./src/map1.csv".to_string()),
+            game: Game::new("./src/map1.csv".to_string(), 2),
             logs: Vec::new(),
             log_receiver,
+            nb_players: 2,
+            map: 1,
         }
     }
 }
@@ -77,11 +87,40 @@ impl App {
         Self::default()
     }
 
+    fn change_map(&mut self) {
+        self.map += 1;
+        if self.map > 3 {
+            self.map = 1;
+        }
+        self.game = Game::new(format!("./src/map{}.csv", self.map), self.nb_players);
+        self.logs.clear();
+        self.should_quit = false;
+        app_log!("Carte changée vers map{}", self.map);
+    }
+
     pub fn reset_game(&mut self) {
-        self.game = Game::new("./src/map1.csv".to_string());
+        self.game = Game::new(format!("./src/map{}.csv", self.map), self.nb_players);
         self.logs.clear();
         self.should_quit = false;
         app_log!("Partie réinitialisée");
+    }
+
+    fn reset_plus(&mut self) {
+        self.nb_players += 1;
+        self.game = Game::new(format!("./src/map{}.csv", self.map), self.nb_players);
+        self.logs.clear();
+        self.should_quit = false;
+        app_log!("Partie réinitialisée avec {} joueurs (+1)", self.nb_players);
+    }
+
+    fn reset_minus(&mut self) {
+        if self.nb_players > 1 {
+            self.nb_players -= 1;
+        }
+        self.game = Game::new(format!("./src/map{}.csv", self.map), self.nb_players);
+        self.logs.clear();
+        self.should_quit = false;
+        app_log!("Partie réinitialisée avec {} joueurs (-1)", self.nb_players);
     }
 
     pub fn log(&mut self, message: String) {
@@ -182,7 +221,8 @@ impl App {
             Item en main: {}  Position: {:?}{}\n\
             Direction: {}  Score: {}\n\
             Objective: {:?}\n\
-            Action: {:?}\n",
+            Action: {:?}\n\
+            Stratégies: {:?}, {:?}\n",
                 i + 1,
                 held_item[i],
                 positions[i],
@@ -190,7 +230,9 @@ impl App {
                 p.get_facing().emoji(),
                 self.game.get_scores()[i],
                 self.game.determine_objectives(i),
-                self.game.determine_action(i)
+                self.game.determine_action(i),
+                p.get_recipes_strategy(),
+                p.get_ingredients_strategy(),
             ));
         }
 
@@ -379,7 +421,7 @@ impl App {
 
         let right_paragraph = Paragraph::new(right_panel_content.as_str()).block(
             Block::bordered()
-                .title("Infos")
+                .title(format!("Infos (Joueurs: {})", self.nb_players))
                 .style(Style::default().bg(Color::Blue)),
         );
         frame.render_widget(right_paragraph, right_info_area);
@@ -454,6 +496,18 @@ impl App {
             KeyCode::Char('r') => {
                 app_log!("reset !!!");
                 self.reset_game();
+            }
+            KeyCode::Char('+') => {
+                app_log!("Reset +1 joueur");
+                self.reset_plus();
+            }
+            KeyCode::Char('-') => {
+                app_log!("Reset -1 joueur");
+                self.reset_minus();
+            }
+            KeyCode::Char('m') => {
+                app_log!("Changer de carte");
+                self.change_map();
             }
             _ => {}
         }

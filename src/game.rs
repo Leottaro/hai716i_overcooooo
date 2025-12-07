@@ -4,7 +4,10 @@ use crate::{
         Assiette, Case, Direction, Ingredient, IngredientCuisson, IngredientEtat, IngredientType,
         Recette,
     },
-    player::{Player, PlayerHand, PlayerIngredientStrategy, PlayerRecipeStrategy},
+    player::{
+        Player, PlayerHand, PlayerIngredientStrategy, PlayerRecipeStrategy,
+        random_ingredient_strategy, random_recipe_strategy,
+    },
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -13,6 +16,7 @@ use std::{
 };
 
 use csv::ReaderBuilder;
+use rand::seq::SliceRandom;
 
 #[derive(Debug, PartialEq)]
 pub enum PickupError {
@@ -126,21 +130,36 @@ impl Game {
         map
     }
 
-    pub fn new(file: String) -> Self {
+    fn pick_spawn_points(map: &[Vec<Case>], nb_players: usize) -> Vec<(usize, usize)> {
+        let mut spawn_points = vec![];
+        for (y, row) in map.iter().enumerate() {
+            for (x, case) in row.iter().enumerate() {
+                if let Case::Vide = case {
+                    spawn_points.push((x, y));
+                }
+            }
+        }
+        let mut rng = rand::rng();
+        spawn_points.shuffle(&mut rng);
+        spawn_points.into_iter().take(nb_players).collect()
+    }
+
+    fn create_players(map: &[Vec<Case>], nb_players: usize) -> Vec<Player> {
+        let mut players = Vec::new();
+        let spawn_points = Game::pick_spawn_points(map, nb_players);
+        for spawn_point in spawn_points {
+            players.push(Player::new(
+                spawn_point,
+                random_recipe_strategy(),
+                random_ingredient_strategy(),
+            ));
+        }
+        players
+    }
+    pub fn new(file: String, nb_players: usize) -> Self {
         let map: Vec<Vec<Case>> = Game::lecture_map(file);
 
-        let players = vec![
-            Player::new(
-                (1, 1),
-                PlayerRecipeStrategy::Closest,
-                PlayerIngredientStrategy::NbApparitionInRecipe,
-            ),
-            Player::new(
-                (13, 8),
-                PlayerRecipeStrategy::LatestExpiration,
-                PlayerIngredientStrategy::Nearest,
-            ),
-        ];
+        let players = Game::create_players(&map, nb_players);
 
         let scores = vec![0; players.len()];
 
@@ -601,9 +620,9 @@ impl Game {
                 }
 
                 // ce qu'on a dans la main n'est pas dans la recette
-                return vec![vec![Case::Table(PlayerHand::Nothing)]];
+                vec![vec![Case::Table(PlayerHand::Nothing)]]
             }
-            PlayerHand::Assiette(_assiette) => return vec![vec![Case::Table(PlayerHand::Nothing)]],
+            PlayerHand::Assiette(_assiette) => vec![vec![Case::Table(PlayerHand::Nothing)]],
             PlayerHand::Nothing => match self.players[player].get_ingredients_strategy() {
                 PlayerIngredientStrategy::NbApparitionInRecipe => {
                     Game::list_objectives_distance(recette_priv_assiette)
@@ -628,10 +647,9 @@ impl Game {
             for x in 0..self.map[y].len() {
                 if let Case::Table(PlayerHand::Assiette((assiette_player, assiette))) =
                     self.map[y][x].clone()
+                    && player == assiette_player
                 {
-                    if player == assiette_player {
-                        assiettes.push(assiette);
-                    }
+                    assiettes.push(assiette);
                 }
             }
         }
@@ -667,10 +685,9 @@ impl Game {
             for x in 0..self.map[y].len() {
                 if let Case::Table(PlayerHand::Assiette((assiette_player, assiette))) =
                     self.map[y][x].clone()
+                    && player == assiette_player
                 {
-                    if player == assiette_player {
-                        assiettes.push(assiette);
-                    }
+                    assiettes.push(assiette);
                 }
             }
         }
@@ -813,14 +830,13 @@ impl Game {
         for y in 0..self.map.len() {
             for x in 0..self.map[0].len() {
                 let case = &self.map[y][x];
-                if let Case::Cuire(Some(cuire_ingr)) = case {
-                    if cuire_ingr.type_ingredient == next_ingredient.type_ingredient
-                        && cuire_ingr.cuisson != IngredientCuisson::Cuit
-                    {
-                        next_ingredient = match ingredients_pool.next() {
-                            Some(ingr) => ingr,
-                            None => return vec![],
-                        }
+                if let Case::Cuire(Some(cuire_ingr)) = case
+                    && cuire_ingr.type_ingredient == next_ingredient.type_ingredient
+                    && cuire_ingr.cuisson != IngredientCuisson::Cuit
+                {
+                    next_ingredient = match ingredients_pool.next() {
+                        Some(ingr) => ingr,
+                        None => return vec![],
                     }
                 }
             }
@@ -950,7 +966,7 @@ impl Game {
 
 impl Default for Game {
     fn default() -> Self {
-        Self::new("./src/map1.csv".to_string())
+        Self::new("./src/map1.csv".to_string(), 2)
     }
 }
 
